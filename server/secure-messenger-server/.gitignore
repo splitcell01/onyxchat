@@ -1,0 +1,76 @@
+# Go build artifacts
+secure-messenger-server
+*.exe
+*.log
+
+# Build / temp directories
+bin/
+dist/
+
+# Environment files (real secrets)
+.env
+.env.*
+
+# Allow safe example env files
+!.env.example
+!.env.dev.example
+!.env.prod.example
+
+# Editor / OS junk
+.vscode/
+.idea/
+*.swp
+.DS_Store
+nano
+# Repo-root binaries / local stuff only
+/secure-messenger-server
+/secure-messenger
+/secure-messenger.db
+/server
+/secure-messenger.db-journal
+# node
+scripts/node_modules/
+
+# Node (scripts)
+scripts/node_modules/
+results.json
+aws-inventory.txt
+
+# Go build artifacts
+secure-messenger-server
+*.exe
+*.log
+
+# Build / temp directories
+bin/
+dist/
+
+# Environment files (real secrets)
+.env
+.env.*
+
+# Allow safe example env files
+!.env.example
+!.env.dev.example
+!.env.prod.example
+
+# Editor / OS junk
+.vscode/
+.idea/
+*.swp
+.DS_Store
+nano
+# Repo-root binaries / local stuff only
+/secure-messenger-server
+/secure-messenger
+/secure-messenger.db
+/server
+/secure-messenger.db-journal
+# node
+scripts/node_modules/
+
+# Node (scripts)
+scripts/node_modules/
+results.json
+aws-inventory.txt
+*.zip
