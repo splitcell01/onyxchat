@@ -60,6 +60,7 @@ const wsMessageDelay = new Trend("ws_message_delay_ms", true);
 // ── Load profile ──────────────────────────────────────────────────────────────
 
 export const options = {
+  setupTimeout: "3m",
   stages: [
     { duration: "30s", target: 20  },
     { duration: "60s", target: 20  },
@@ -102,7 +103,7 @@ export function setup() {
       } catch (_) {}
     }
 
-    sleep(0.05);
+    sleep(0.01);
   }
 
   console.log(`Setup complete: ${users.length}/${SETUP_USERS} users registered`);
