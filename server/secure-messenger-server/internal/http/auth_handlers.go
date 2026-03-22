@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/cole/secure-messenger-server/internal/store"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -41,7 +40,7 @@ type RegisterResponse struct {
 	Token    string `json:"token"`
 }
 
-func RegisterHandler(userStore *store.UserStore, jwtMgr *JWTManager) http.HandlerFunc {
+func RegisterHandler(userStore userStorer, jwtMgr *JWTManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("[Register] incoming request")
 
@@ -120,7 +119,7 @@ type LoginResponse struct {
 	Token    string `json:"token"`
 }
 
-func LoginHandler(userStore *store.UserStore, jwtMgr *JWTManager, idLimiter *KeyedLimiter) http.HandlerFunc {
+func LoginHandler(userStore userStorer, jwtMgr *JWTManager, idLimiter *KeyedLimiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req LoginRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -172,7 +171,7 @@ type UserResponse struct {
 	Username string `json:"username"`
 }
 
-func ListUsersHandler(userStore *store.UserStore) http.HandlerFunc {
+func ListUsersHandler(userStore userStorer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		users, err := userStore.ListUsers()
 		if err != nil {

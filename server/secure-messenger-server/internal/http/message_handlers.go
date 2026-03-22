@@ -74,7 +74,7 @@ func (r *SendMessageRequest) Validate() string {
 func StartMessageSubscriber(
 	ctx context.Context,
 	rdb *redis.Client,
-	msgStore *store.MessageStore,
+	msgStore messageStorer,
 	hub *Hub,
 ) error {
 	sub := rdb.Subscribe(ctx, "message.created")
@@ -112,8 +112,8 @@ type EventPublisher interface {
 }
 
 func SendMessageHandler(
-	userStore *store.UserStore,
-	msgStore *store.MessageStore,
+	userStore userStorer,
+	msgStore messageStorer,
 	hub *Hub,
 	publisher EventPublisher,
 ) http.HandlerFunc {
@@ -205,7 +205,7 @@ type ListMessagesResponse struct {
 	Messages []store.Message `json:"messages"`
 }
 
-func ListMessagesHandler(userStore *store.UserStore, msgStore *store.MessageStore) http.HandlerFunc {
+func ListMessagesHandler(userStore userStorer, msgStore messageStorer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		currentUser := CurrentUser(r)
 		if currentUser == nil {

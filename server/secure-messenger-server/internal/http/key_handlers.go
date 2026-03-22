@@ -5,15 +5,13 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-
-	"github.com/cole/secure-messenger-server/internal/store"
 )
 
 type uploadKeyRequest struct {
 	PublicKey string `json:"publicKey"`
 }
 
-func UploadKeyHandler(userStore *store.UserStore) http.HandlerFunc {
+func UploadKeyHandler(userStore userStorer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := CurrentUser(r)
 		if user == nil {
@@ -49,7 +47,7 @@ type getKeyResponse struct {
 	PublicKey string `json:"publicKey"`
 }
 
-func GetKeyHandler(userStore *store.UserStore) http.HandlerFunc {
+func GetKeyHandler(userStore userStorer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		username := vars["username"]

@@ -266,8 +266,8 @@ func NewUpgrader(allowedOrigins []string, env string) websocket.Upgrader {
 // ---- Handler ----
 
 func WebSocketHandler(
-	userStore *store.UserStore,
-	msgStore *store.MessageStore,
+	userStore userStorer,
+	msgStore messageStorer,
 	hub *Hub,
 	upgrader websocket.Upgrader,
 ) http.HandlerFunc {
@@ -397,7 +397,7 @@ func (c *wsClient) writePump(ctx context.Context, cancel context.CancelFunc) {
 	}
 }
 
-func (c *wsClient) readPump(ctx context.Context, cancel context.CancelFunc, userStore *store.UserStore, hub *Hub) {
+func (c *wsClient) readPump(ctx context.Context, cancel context.CancelFunc, userStore userStorer, hub *Hub) {
 	log.Printf("[WebSocket] readPump start user=%d", c.userID)
 	defer log.Printf("[WebSocket] readPump exit user=%d", c.userID)
 
