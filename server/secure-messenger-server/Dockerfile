@@ -17,7 +17,7 @@ RUN go build -o server ./cmd/server
 # ============================
 FROM alpine:3.20
 
-RUN apk add --no-cache netcat-openbsd wget ca-certificates
+RUN apk add --no-cache netcat-openbsd wget ca-certificates postgresql-client
 
 RUN adduser -D -g '' appuser \
     && mkdir -p /app/data \
