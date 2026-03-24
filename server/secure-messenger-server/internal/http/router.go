@@ -98,17 +98,16 @@ func NewRouter(
 		MaxBodyBytes(1<<20)(http.HandlerFunc(SendMessageHandler(userStore, msgStore, hub, publisher))),
 	).Methods(http.MethodPost, http.MethodOptions)
 
-	protected.HandleFunc("/admin/invites", AdminCreateInviteHandler(userStore)).Methods(http.MethodPost)
-	protected.HandleFunc("/admin/invites/{code}/reset", AdminResetInviteHandler(userStore)).Methods(http.MethodPost)
+	protected.HandleFunc("/messages", ListMessagesHandler(userStore, msgStore)).Methods(http.MethodGet, http.MethodOptions)
 
-	protected.HandleFunc("/admin/invites",
-		AdminListInvitesHandler(userStore)).Methods(http.MethodGet, http.MethodOptions)
- 
-	protected.Handle("/admin/invites",
+	// ---- admin ----
+	admin := protected.NewRoute().Subrouter()
+	admin.Use(AdminOnly("ashenspellbook"))
+
+	admin.HandleFunc("/admin/invites", AdminListInvitesHandler(userStore)).Methods(http.MethodGet, http.MethodOptions)
+	admin.Handle("/admin/invites",
 		MaxBodyBytes(1<<20)(http.HandlerFunc(AdminCreateInviteHandler(userStore)))).Methods(http.MethodPost, http.MethodOptions)
- 
-	protected.HandleFunc("/admin/invites/{code}/reset",
-		AdminResetInviteHandler(userStore)).Methods(http.MethodPost, http.MethodOptions)
+	admin.HandleFunc("/admin/invites/{code}/reset", AdminResetInviteHandler(userStore)).Methods(http.MethodPost, http.MethodOptions)
 
 
 	// ---- E2E key endpoints ----

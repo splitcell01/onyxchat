@@ -1,3 +1,11 @@
+package store
+
+import (
+    "errors"
+    "strings"
+    "time"
+)
+
 // ─────────────────────────────────────────────────────────────
 // APPEND to internal/store/user_store.go
 // Add "time" to the existing import block.
