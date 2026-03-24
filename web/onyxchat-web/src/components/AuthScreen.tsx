@@ -156,6 +156,42 @@ export function AuthScreen() {
           >
             {loading ? 'Please wait…' : tab === 'login' ? 'Sign in' : 'Create account'}
           </button>
+
+          {/* Privacy policy link — shown on register tab */}
+          {tab === 'register' && (
+            <p style={{
+              fontSize: '11px', color: 'var(--text-mute)',
+              textAlign: 'center', margin: '4px 0 0',
+              lineHeight: 1.5,
+            }}>
+              By creating an account you agree to our{' '}
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--blue)', textDecoration: 'none' }}
+              >
+                Privacy Policy
+              </a>
+            </p>
+          )}
+        </div>
+
+        {/* Footer privacy link — always visible */}
+        <div style={{
+          marginTop: '24px',
+          textAlign: 'center',
+          fontSize: '11px',
+          color: 'var(--text-mute)',
+        }}>
+          <a
+            href="/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: 'var(--text-mute)', textDecoration: 'none' }}
+          >
+            Privacy Policy
+          </a>
         </div>
       </div>
     </div>
