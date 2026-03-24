@@ -5,12 +5,12 @@ import App from './App.tsx'
 import { AuthProvider } from './context/AuthContext.tsx'
 import { ChatProvider } from './context/ChatContext.tsx'
 
+const isAdmin = window.location.pathname === '/admin'
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
-      <ChatProvider>
-        <App />
-      </ChatProvider>
+      {isAdmin ? <App /> : <ChatProvider><App /></ChatProvider>}
     </AuthProvider>
   </StrictMode>,
 )

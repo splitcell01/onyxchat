@@ -29,6 +29,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     throw new Error(text || res.statusText)
   }
 
+  const ct = res.headers.get('content-type') || ''
+  if (!ct.includes('application/json')) return null as T
+  return res.json() as Promise<T>
+
   return res.json() as Promise<T>
 }
 
