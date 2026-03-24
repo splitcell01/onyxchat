@@ -579,8 +579,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // ── API helpers ────────────────────────────────────────────────
 async function apiFetch(path, opts = {}) {
+  const token = TOKEN || sessionStorage.getItem('onyx_admin_token')
   const headers = { 'Content-Type': 'application/json' }
-  if (TOKEN) headers['Authorization'] = `Bearer ${TOKEN}`
+  if (token) headers['Authorization'] = `Bearer ${token}`
   const res = await fetch(API_BASE + path, { ...opts, headers })
   if (!res.ok) {
     const txt = await res.text()
