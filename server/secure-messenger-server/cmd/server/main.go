@@ -58,7 +58,7 @@ func main() {
 		addr = ":8080"
 	}
 
-	jwtSecret := os.Getenv("JWT_SECRET")
+	jwtSecret := store.ResolveSecret("JWT_SECRET", "/onyxchat/prod/JWT_SECRET")
 	if env == "prod" && jwtSecret == "" {
 		logger.Fatal("JWT_SECRET is required in prod (set SM_ENV=prod and JWT_SECRET)")
 	}
@@ -88,7 +88,7 @@ func main() {
 
 	if env == "prod" {
 		redisOpts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
-		redisOpts.Password = os.Getenv("SM_REDIS_AUTH_TOKEN")
+		redisOpts.Password = store.ResolveSecret("SM_REDIS_AUTH_TOKEN", "/onyxchat/prod/SM_REDIS_AUTH_TOKEN")
 	}
 
 	rdb := redis.NewClient(redisOpts)
