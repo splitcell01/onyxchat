@@ -18,6 +18,9 @@ type userStorer interface {
 	SetPublicKey(userID int64, pubKey string) error
 	GetPublicKeyByUsername(username string) (string, error)
 	Ping(ctx context.Context) error
+	AdminListInvites() ([]store.InviteCodeFull, error)
+	AdminCreateInvite(code, createdBy string, expiresAt *time.Time) (*store.InviteCodeFull, error)
+	AdminResetInvite(code string) error
 }
 
 // messageStorer is the subset of *store.MessageStore used by HTTP handlers.
