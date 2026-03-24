@@ -6,7 +6,7 @@ import { ChatPanel } from './components/ChatPanel'
 import { AdminPanel } from './components/AdminPanel'
 
 export default function App() {
-  const { isAuthenticated, user } = useAuth()
+  const { isAuthenticated } = useAuth()
 
   if (!isAuthenticated) return <AuthScreen />
 
