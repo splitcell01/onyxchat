@@ -100,6 +100,20 @@ func NewRouter(
 
 	protected.HandleFunc("/messages", ListMessagesHandler(userStore, msgStore)).Methods(http.MethodGet, http.MethodOptions)
 
+	protected.HandleFunc("/admin/invites", AdminListInvitesHandler(userStore)).Methods(http.MethodGet)
+	protected.HandleFunc("/admin/invites", AdminCreateInviteHandler(userStore)).Methods(http.MethodPost)
+	protected.HandleFunc("/admin/invites/{code}/reset", AdminResetInviteHandler(userStore)).Methods(http.MethodPost)
+
+	protected.HandleFunc("/admin/invites",
+		AdminListInvitesHandler(userStore)).Methods(http.MethodGet, http.MethodOptions)
+ 
+	protected.Handle("/admin/invites",
+		MaxBodyBytes(1<<20)(http.HandlerFunc(AdminCreateInviteHandler(userStore)))).Methods(http.MethodPost, http.MethodOptions)
+ 
+	protected.HandleFunc("/admin/invites/{code}/reset",
+		AdminResetInviteHandler(userStore)).Methods(http.MethodPost, http.MethodOptions)
+
+
 	// ---- E2E key endpoints ----
 	// PUT  /api/v1/keys          — upload your own public key
 	// GET  /api/v1/keys/{username} — fetch any user's public key
