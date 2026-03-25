@@ -19,8 +19,9 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.url.includes('/api/')) {
+    // Clone the request so the body is preserved
     event.respondWith(
-      fetch(event.request).catch(() =>
+      fetch(event.request.clone()).catch(() =>
         new Response('{"error":"offline"}', { headers: { 'Content-Type': 'application/json' } })
       )
     )
