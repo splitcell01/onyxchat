@@ -120,7 +120,7 @@ func (s *UserStore) Ping(ctx context.Context) error {
 
 func (s *UserStore) GetUserByUsername(username string) (*User, error) {
 	row := s.db.QueryRow(
-		`SELECT id, username, password_hash, COALESCE(public_key, '') FROM users WHERE username = $1`,
+		`SELECT id, username, password_hash, COALESCE(public_key, '') FROM users WHERE username = $1 AND deleted_at IS NULL`,
 		username,
 	)
 
@@ -137,7 +137,7 @@ func (s *UserStore) GetUserByUsername(username string) (*User, error) {
 
 func (s *UserStore) ListUsers() ([]*User, error) {
 	rows, err := s.db.Query(
-		`SELECT id, username FROM users ORDER BY username ASC`,
+		`SELECT id, username FROM users WHERE deleted_at IS NULL ORDER BY username ASC`,
 	)
 	if err != nil {
 		return nil, err
@@ -200,7 +200,8 @@ func (s *UserStore) GetInviteCode(code string) (*InviteCode, error) {
 	var ic InviteCode
 	err := s.db.QueryRow(
 		`SELECT id, code, used_by, expires_at FROM invite_codes
-         WHERE code = $1`, code,
+         WHERE code = $1 AND used_by IS NULL
+         AND (expires_at IS NULL OR expires_at > NOW())`, code,
 	).Scan(&ic.ID, &ic.Code, &ic.UsedBy, &ic.ExpiresAt)
 	if err == sql.ErrNoRows {
 		return nil, nil

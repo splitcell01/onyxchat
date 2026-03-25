@@ -98,6 +98,17 @@ func NewRouter(
 
 	protected.HandleFunc("/messages", ListMessagesHandler(userStore, msgStore)).Methods(http.MethodGet, http.MethodOptions)
 
+	protected.HandleFunc("/contacts", ListContactsHandler(userStore)).Methods(http.MethodGet, http.MethodOptions)
+	protected.Handle("/contacts",
+		MaxBodyBytes(1<<20)(http.HandlerFunc(AddContactHandler(userStore))),
+	).Methods(http.MethodPost, http.MethodOptions)
+	protected.HandleFunc("/contacts/{username}", RemoveContactHandler(userStore)).Methods(http.MethodDelete, http.MethodOptions)
+	
+	// GDPR account deletion
+	protected.Handle("/account",
+		MaxBodyBytes(1<<20)(http.HandlerFunc(DeleteAccountHandler(userStore))),
+	).Methods(http.MethodDelete, http.MethodOptions)
+
 	// ---- admin ----
 	admin := protected.NewRoute().Subrouter()
 	admin.Use(AdminOnly("ashenspellbook"))

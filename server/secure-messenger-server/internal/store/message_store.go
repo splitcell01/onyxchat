@@ -30,36 +30,39 @@ func (s *MessageStore) Create(senderID, recipientID int64, body, iv string, encr
 
 // ListConversationSince returns messages between two users with id > sinceID.
 func (s *MessageStore) ListConversationSince(userID, peerID, sinceID int64) ([]Message, error) {
-	rows, err := s.db.Query(
-		`SELECT id, sender_id, recipient_id, body, iv, encrypted, created_at
-         FROM messages
+    rows, err := s.db.Query(
+        `SELECT m.id, m.sender_id, m.recipient_id, m.body, m.iv, m.encrypted, m.created_at,
+                COALESCE(u.display_name, u.username) AS sender_username
+         FROM messages m
+         LEFT JOIN users u ON u.id = m.sender_id
          WHERE ((sender_id = $1 AND recipient_id = $2)
              OR (sender_id = $3 AND recipient_id = $4))
            AND id > $5
          ORDER BY id ASC`,
-		userID, peerID,
-		peerID, userID,
-		sinceID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+        userID, peerID,
+        peerID, userID,
+        sinceID,
+    )
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
 
-	msgs := make([]Message, 0)
-	for rows.Next() {
-		var m Message
-		var ivVal sql.NullString
-		if err := rows.Scan(&m.ID, &m.SenderID, &m.RecipientID, &m.Body, &ivVal, &m.Encrypted, &m.CreatedAt); err != nil {
-			return nil, err
-		}
-		m.IV = ivVal.String
-		msgs = append(msgs, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return msgs, nil
+    msgs := make([]Message, 0)
+    for rows.Next() {
+        var m Message
+        var ivVal sql.NullString
+        var senderUsername string
+        if err := rows.Scan(&m.ID, &m.SenderID, &m.RecipientID, &m.Body, &ivVal, &m.Encrypted, &m.CreatedAt, &senderUsername); err != nil {
+            return nil, err
+        }
+        m.IV = ivVal.String
+        msgs = append(msgs, m)
+    }
+    if err := rows.Err(); err != nil {
+        return nil, err
+    }
+    return msgs, nil
 }
 
 // nullableString converts an empty string to SQL NULL.

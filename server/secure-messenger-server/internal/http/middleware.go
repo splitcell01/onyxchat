@@ -43,6 +43,12 @@ func AuthMiddleware(jwtMgr *JWTManager) func(http.Handler) http.Handler {
 				Username: claims.Username,
 			}
 
+			_, err = userStore.GetUserByID(claims.UserID)
+			if err != nil {
+				http.Error(w, "account not found or deleted", http.StatusUnauthorized)
+				return
+			}
+
 			ctx := context.WithValue(r.Context(), userContextKey, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

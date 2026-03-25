@@ -15,6 +15,7 @@ import {
 } from '../lib/crypto'
 
 import type { Contact, Message, WSChatMessage, WSTyping, WSPresence } from '../types'
+import { fetchContacts } from '../api/contacts'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -136,10 +137,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const loadContacts = useCallback(async () => {
     if (!user) return
-    const users = await fetchUsers()
+    const contacts = await fetchContacts()
     setContacts(prev => {
       const prevMap = new Map(prev.map(c => [c.id, c]))
-      return users
+      return contacts
         .filter(u => u.id !== user.id)
         .map(u => ({ ...u, online: prevMap.get(u.id)?.online ?? false }))
     })
