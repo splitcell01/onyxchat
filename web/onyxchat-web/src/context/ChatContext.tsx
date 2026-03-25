@@ -4,7 +4,7 @@ import {
 } from 'react'
 
 import { useWebSocket }                              from '../hooks/useWebSocket'
-import { fetchUsers, fetchMessages, sendMessage as apiSendMessage } from '../api/messages'
+import { fetchMessages, sendMessage as apiSendMessage } from '../api/messages'
 import { fetchPublicKey }                            from '../api/keys'
 import { useAuth }                                   from './AuthContext'
 import {
