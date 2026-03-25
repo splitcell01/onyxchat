@@ -63,20 +63,14 @@ func NewRouter(
 		),
 	).Methods(http.MethodPost, http.MethodOptions)
 
-	r.Handle("/register",
-		LoginIPRateLimit(ipLimiter)( // reuse your existing IP limiter
-			MaxBodyBytes(1<<20)(
-				http.HandlerFunc(RegisterHandler(userStore, jwtMgr)),
-			),
-		),
-	).Methods(http.MethodPost, http.MethodOptions)
-	// same for /api/v1/register
-
 	// ---- /api/v1 ----
 	api := r.PathPrefix("/api/v1").Subrouter()
 
+	// Bug fix: /api/v1/register now has IP rate limiting (was missing before)
 	api.Handle("/register",
-		MaxBodyBytes(1<<20)(http.HandlerFunc(RegisterHandler(userStore, jwtMgr))),
+		LoginIPRateLimit(ipLimiter)(
+			MaxBodyBytes(1<<20)(http.HandlerFunc(RegisterHandler(userStore, jwtMgr))),
+		),
 	).Methods(http.MethodPost, http.MethodOptions)
 
 	api.Handle("/login",

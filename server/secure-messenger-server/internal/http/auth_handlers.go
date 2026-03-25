@@ -143,8 +143,13 @@ func LoginHandler(userStore userStorer, jwtMgr *JWTManager, idLimiter *KeyedLimi
 		}
 
 		user, err := userStore.GetUserByUsername(req.Username)
-		if err != nil || user == nil {
-			http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		if err != nil {
+			if err == store.ErrUserNotFound {
+				http.Error(w, "invalid credentials", http.StatusUnauthorized)
+			} else {
+				log.Printf("[Login] database error looking up user: %v", err)
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
 			return
 		}
 

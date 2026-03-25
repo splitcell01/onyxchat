@@ -29,6 +29,13 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     body: body ? JSON.stringify(body) : undefined,
   })
 
+  // Auto-clear stale token on 401 so the user is returned to the login screen
+  // rather than being silently stuck with an expired/invalid session.
+  if (res.status === 401) {
+    setToken(null)
+    sessionStorage.removeItem('user')
+  }
+
   if (!res.ok) {
     const text = await res.text()
     throw new Error(text || res.statusText)
