@@ -1,4 +1,4 @@
-const CACHE_NAME = 'onyxchat-v1'
+const CACHE_NAME = 'onyxchat-v2'  // ← bump version to force old SW out
 const STATIC_ASSETS = ['/', '/index.html', '/manifest.json']
 
 self.addEventListener('install', (event) => {
@@ -19,9 +19,8 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.url.includes('/api/')) {
-    // Clone the request so the body is preserved
     event.respondWith(
-      fetch(event.request.clone()).catch(() =>
+      fetch(event.request.clone()).catch(() =>  // ← .clone() added here
         new Response('{"error":"offline"}', { headers: { 'Content-Type': 'application/json' } })
       )
     )
