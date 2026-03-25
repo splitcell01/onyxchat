@@ -204,6 +204,22 @@ func registerUser(t *testing.T, us *fakeUserStore, jwtMgr *JWTManager, username,
 	}
 }
 
+func (f *fakeUserStore) AdminListInvites() ([]store.InviteCodeFull, error) {
+    return nil, nil
+}
+
+func (f *fakeUserStore) AdminCreateInvite(code, createdBy string, expiresAt *time.Time) (*store.InviteCodeFull, error) {
+    return nil, nil
+}
+
+func (f *fakeUserStore) AdminResetInvite(code string) error {
+    return nil
+}
+
+func (f *fakeUserStore) UpdatePassword(userID int64, newHash string) error {
+    return nil
+}
+
 // ─────────────────────────────────────────────────────────────
 // RegisterHandler
 // ─────────────────────────────────────────────────────────────
