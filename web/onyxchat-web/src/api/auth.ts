@@ -1,53 +1,41 @@
-const BASE_URL = import.meta.env.VITE_API_URL
+import { api, setToken } from './client'
+import { getOrCreateKeyPair, exportPublicKey, clearKeyPair } from '../lib/crypto'
+import { uploadPublicKey } from './keys'
+import type { AuthResponse } from '../types'
 
-if (!BASE_URL) {
-  throw new Error('VITE_API_URL is not set')
-}
-
-let token: string | null = sessionStorage.getItem('token')
-
-export function setToken(t: string | null) {
-  token = t
-  if (t) sessionStorage.setItem('token', t)
-  else sessionStorage.removeItem('token')
-}
-
-export function getToken() {
-  return token
-}
-
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+async function publishKey(): Promise<void> {
+  try {
+    const kp     = await getOrCreateKeyPair()
+    const pubKey = await exportPublicKey(kp)
+    await uploadPublicKey(pubKey)
+  } catch (err) {
+    console.warn('[E2E] Could not upload public key:', err)
   }
+}
 
-  if (token) headers['Authorization'] = `Bearer ${token}`
+export async function login(username: string, password: string): Promise<AuthResponse> {
+  const data = await api.post<AuthResponse>('/api/v1/login', { username, password })
+  setToken(data.token)
+  await publishKey()
+  return data
+}
 
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
+export async function register(username: string, password: string, inviteCode: string) {
+  const data = await api.post<AuthResponse>('/api/v1/register', { username, password, invite_code: inviteCode })
+  setToken(data.token)
+  await publishKey()
+  return data
+}
+
+export async function logout(): Promise<void> {
+  setToken(null)
+  sessionStorage.removeItem('user')
+  await clearKeyPair()
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await api.patch('/api/v1/users/me/password', {
+    current_password: currentPassword,
+    new_password: newPassword,
   })
-
-  // Auto-clear stale token on 401 so the user is returned to the login screen
-  // rather than being silently stuck with an expired/invalid session.
-  if (res.status === 401) {
-    setToken(null)
-    sessionStorage.removeItem('user')
-  }
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(text || res.statusText)
-  }
-
-  const ct = res.headers.get('content-type') || ''
-  if (!ct.includes('application/json')) return null as T
-  return res.json() as Promise<T>
-}
-
-export const api = {
-  get: <T>(path: string) => request<T>('GET', path),
-  post: <T>(path: string, body: unknown) => request<T>('POST', path, body),
-  patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
 }
