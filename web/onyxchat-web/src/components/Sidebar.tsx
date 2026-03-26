@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useChat } from '../context/ChatContext'
 import { useAuth } from '../context/AuthContext'
-import { SettingsPanel } from './SettingsPanel'
+import { SettingsPanel } from './components/SettingsPanel'
 
 const initials = (name: string) => name.slice(0, 2).toUpperCase()
 
 export function Sidebar() {
   const { user, logout } = useAuth()
   const { contacts, activePeer, unread, selectPeer, loadContacts } = useChat()
+  const [showSettings, setShowSettings] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
 
   useEffect(() => { loadContacts() }, [loadContacts])
@@ -106,7 +107,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </>
   )
 }
