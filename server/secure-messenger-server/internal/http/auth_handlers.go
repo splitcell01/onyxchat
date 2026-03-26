@@ -75,15 +75,14 @@ func RegisterHandler(userStore userStorer, jwtMgr *JWTManager) http.HandlerFunc 
 		// fails (e.g. duplicate username) the invite code is not burned.
 		user, err := userStore.RegisterWithInvite(req.InviteCode, req.Username, string(hashedBytes))
 		if err != nil {
-			switch err {
-			case store.ErrInvalidInviteCode:
-				http.Error(w, "invalid or expired invite code", http.StatusForbidden)
-			case store.ErrUsernameTaken:
-				http.Error(w, "username already taken", http.StatusConflict)
-			default:
-				log.Printf("[Register] could not create user: %v", err)
-				http.Error(w, "could not create user", http.StatusInternalServerError)
+			log.Printf("[Register] could not create user: %v", err)
+
+			if strings.Contains(err.Error(), "invalid or already used invite code") {
+				http.Error(w, "invalid or already used invite code", http.StatusForbidden)
+				return
 			}
+
+			http.Error(w, "failed to create user", http.StatusInternalServerError)
 			return
 		}
 

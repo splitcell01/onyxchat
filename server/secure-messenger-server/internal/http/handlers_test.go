@@ -35,6 +35,13 @@ func newFakeUserStore() *fakeUserStore {
 	}
 }
 
+func (f *fakeUserStore) RegisterWithInvite(code, username, passwordHash string) (*store.User, error) {
+	if err := f.ConsumeInviteCode(code, username); err != nil {
+		return nil, err
+	}
+	return f.CreateUser(username, passwordHash)
+}
+
 func (f *fakeUserStore) addInvite(code string) { f.inviteCodes[code] = true }
 
 func (f *fakeUserStore) CreateUser(username, passwordHash string) (*store.User, error) {
@@ -90,6 +97,36 @@ func (f *fakeUserStore) GetPublicKeyByUsername(username string) (string, error) 
 }
 
 func (f *fakeUserStore) Ping(_ context.Context) error { return nil }
+
+func (f *fakeUserStore) GetUserByID(userID int64) (*store.User, error) {
+	for _, u := range f.users {
+		if u.ID == userID {
+			return u, nil
+		}
+	}
+	return nil, store.ErrUserNotFound
+}
+
+func (f *fakeUserStore) ListContacts(userID int64) ([]*store.Contact, error) {
+	return []*store.Contact{}, nil
+}
+
+func (f *fakeUserStore) AddContact(userID int64, targetUsername string) error {
+	return nil
+}
+
+func (f *fakeUserStore) RemoveContact(userID int64, targetUsername string) error {
+	return nil
+}
+
+func (f *fakeUserStore) DeleteAccountGDPR(userID int64) (*store.GDPRDeletionRecord, error) {
+	return &store.GDPRDeletionRecord{
+		UserID:           userID,
+		MessagesPurged:   0,
+		PublicKeyCleared: true,
+		InvitesExpired:   0,
+	}, nil
+}
 
 // ─────────────────────────────────────────────────────────────
 
