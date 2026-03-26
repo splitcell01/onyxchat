@@ -16,12 +16,13 @@ resource "aws_iam_role" "github_deploy" {
       }
       Action = "sts:AssumeRoleWithWebIdentity"
       Condition = {
+        StringEquals = {
+          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+        }
         StringLike = {
           "token.actions.githubusercontent.com:sub" = [
             "repo:splitcell01/secure-messenger-server:ref:refs/heads/main",
-            "repo:splitcell01/secure-messenger-server:pull_request",
-            "repo:splitcell01/onyxchat-iac:ref:refs/heads/main",
-            "repo:splitcell01/onyxchat-iac:pull_request"
+            "repo:splitcell01/onyxchat-iac:ref:refs/heads/main"
           ]
         }
       }
@@ -143,17 +144,6 @@ resource "aws_iam_role_policy" "github_deploy" {
         Sid    = "TerraformWrite"
         Effect = "Allow"
         Action = [
-          "iam:CreateRole",
-          "iam:UpdateRole",
-          "iam:DeleteRole",
-          "iam:AttachRolePolicy",
-          "iam:DetachRolePolicy",
-          "iam:PutRolePolicy",
-          "iam:DeleteRolePolicy",
-          "iam:CreatePolicy",
-          "iam:DeletePolicy",
-          "iam:CreatePolicyVersion",
-          "iam:DeletePolicyVersion",
           "iam:TagRole",
           "iam:GetOpenIDConnectProvider",
           "iam:ListOpenIDConnectProviders",
@@ -174,27 +164,14 @@ resource "aws_iam_role_policy" "github_deploy" {
           "elasticloadbalancing:DeleteRule",
           "elasticloadbalancing:ModifyRule",
           "elasticloadbalancing:AddTags",
-          "elasticache:CreateReplicationGroup",
-          "elasticache:DeleteReplicationGroup",
           "elasticache:ModifyReplicationGroup",
-          "elasticache:DeleteCacheCluster",
-          "elasticache:CreateCacheCluster",
           "elasticache:AddTagsToResource",
-          "elasticloadbalancing:CreateRule",
           "logs:CreateLogGroup",
-          "logs:DeleteLogGroup",
           "logs:PutRetentionPolicy",
           "logs:TagResource",
           "logs:ListTagsLogGroup",
           "rds:ModifyDBInstance",
           "rds:AddTagsToResource",
-          "budgets:ModifyBudget",
-          "ce:CreateAnomalyMonitor",
-          "ce:UpdateAnomalyMonitor",
-          "ce:DeleteAnomalyMonitor",
-          "ce:CreateAnomalySubscription",
-          "ce:UpdateAnomalySubscription",
-          "ce:DeleteAnomalySubscription"
         ]
         Resource = "*"
       },
