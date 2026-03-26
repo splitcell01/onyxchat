@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/gorilla/mux"
 	"github.com/cole/secure-messenger-server/internal/store"
@@ -40,12 +41,15 @@ func DeleteAccountHandler(userStore userStorer) http.HandlerFunc {
 			http.Error(w, "user not found", http.StatusNotFound)
 			return
 		}
-		if err := bcryptCompare(user.PasswordHash, req.Password); err != nil {
+		if err := bcrypt.CompareHashAndPassword(
+			[]byte(user.PasswordHash),
+			[]byte(req.Password),
+		); err != nil {
 			http.Error(w, "invalid password", http.StatusUnauthorized)
 			return
 		}
 
-		record, err := userStore.DeleteAccountGDPR(cu.UserID)
+		record, err := userStore.DeleteAccountGDPR(cu.ID)
 		if err != nil {
 			switch {
 			case errors.Is(err, store.ErrAlreadyDeleted):

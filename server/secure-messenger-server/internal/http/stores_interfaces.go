@@ -14,6 +14,7 @@ type userStorer interface {
 	CreateUser(username, passwordHash string) (*store.User, error)
 	GetUserByUsername(username string) (*store.User, error)
 	GetByUsername(username string) (*store.User, error)
+	GetUserByID(userID int64) (*store.User, error)
 	ListUsers() ([]*store.User, error)
 	ConsumeInviteCode(code, username string) error
 	SetPublicKey(userID int64, pubKey string) error
@@ -23,6 +24,11 @@ type userStorer interface {
 	AdminCreateInvite(code, createdBy string, expiresAt *time.Time) (*store.InviteCodeFull, error)
 	AdminResetInvite(code string) error
 	UpdatePassword(userID int64, newHash string) error
+
+	ListContacts(userID int64) ([]*store.Contact, error)
+	AddContact(userID int64, username string) error
+	RemoveContact(userID int64, username string) error
+	DeleteAccountGDPR(userID int64) (*store.GDPRDeletionRecord, error)
 }
 
 // messageStorer is the subset of *store.MessageStore used by HTTP handlers.
