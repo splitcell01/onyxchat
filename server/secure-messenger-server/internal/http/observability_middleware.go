@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -155,22 +156,26 @@ var (
 		},
 		[]string{"limiter"},
 	)
+
+	initHTTPMetricsOnce sync.Once
 )
 
 // InitHTTPMetrics registers all custom Prometheus metrics. Call once at startup.
 func InitHTTPMetrics() {
-	prometheus.MustRegister(
-		httpRequests,
-		httpDuration,
-		ActiveWSConnections,
-		WSMessagesReceived,
-		WSRateLimitRejections,
-		MessagesSent,
-		MessageDeduplicated,
-		MessagePublishFailures,
-		DBQueryDuration,
-		HTTPRateLimitRejections,
-	)
+	initHTTPMetricsOnce.Do(func() {
+		prometheus.MustRegister(
+			httpRequests,
+			httpDuration,
+			ActiveWSConnections,
+			WSMessagesReceived,
+			WSRateLimitRejections,
+			MessagesSent,
+			MessageDeduplicated,
+			MessagePublishFailures,
+			DBQueryDuration,
+			HTTPRateLimitRejections,
+		)
+	})
 }
 
 // ObserveDBQuery times a database operation. Use as a deferred call:

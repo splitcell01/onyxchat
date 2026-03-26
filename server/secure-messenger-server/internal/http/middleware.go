@@ -2,8 +2,11 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
 type authContextKey string
@@ -11,30 +14,74 @@ type authContextKey string
 const userContextKey authContextKey = "authUser"
 
 type AuthUser struct {
-	ID       int64
-	Username string
+	ID       int64  `json:"id"`
+	Username string `json:"username"`
+}
+
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
+func writeJSONError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(errorResponse{Error: msg})
 }
 
 // AuthMiddleware validates Authorization: Bearer <token>
 // and injects AuthUser into the request context.
-func AuthMiddleware(jwtMgr *JWTManager) func(http.Handler) http.Handler {
+func AuthMiddleware(jwtMgr *JWTManager, userStore userStorer, log *zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodOptions {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				http.Error(w, "missing Authorization header", http.StatusUnauthorized)
+				log.Warn("auth failed: missing authorization header",
+					zap.String("path", r.URL.Path),
+					zap.String("method", r.Method),
+					zap.String("remote_addr", r.RemoteAddr),
+				)
+				writeJSONError(w, http.StatusUnauthorized, "missing authorization header")
 				return
 			}
 
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-				http.Error(w, "invalid Authorization header", http.StatusUnauthorized)
+				log.Warn("auth failed: invalid authorization header format",
+					zap.String("path", r.URL.Path),
+					zap.String("method", r.Method),
+					zap.String("remote_addr", r.RemoteAddr),
+				)
+				writeJSONError(w, http.StatusUnauthorized, "invalid authorization header")
 				return
 			}
 
 			claims, err := jwtMgr.Parse(parts[1])
 			if err != nil {
-				http.Error(w, "invalid or expired token", http.StatusUnauthorized)
+				log.Warn("auth failed: invalid or expired token",
+					zap.String("path", r.URL.Path),
+					zap.String("method", r.Method),
+					zap.String("remote_addr", r.RemoteAddr),
+					zap.Error(err),
+				)
+				writeJSONError(w, http.StatusUnauthorized, "invalid or expired token")
+				return
+			}
+
+			_, err = userStore.GetUserByID(claims.UserID)
+			if err != nil {
+				log.Warn("auth failed: account not found or deleted",
+					zap.Int64("user_id", claims.UserID),
+					zap.String("username", claims.Username),
+					zap.String("path", r.URL.Path),
+					zap.String("method", r.Method),
+					zap.Error(err),
+				)
+				writeJSONError(w, http.StatusUnauthorized, "account not found or deleted")
 				return
 			}
 
@@ -43,19 +90,12 @@ func AuthMiddleware(jwtMgr *JWTManager) func(http.Handler) http.Handler {
 				Username: claims.Username,
 			}
 
-			_, err = userStore.GetUserByID(claims.UserID)
-			if err != nil {
-				http.Error(w, "account not found or deleted", http.StatusUnauthorized)
-				return
-			}
-
 			ctx := context.WithValue(r.Context(), userContextKey, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
-// CurrentUser pulls the AuthUser out of context.
 func CurrentUser(r *http.Request) *AuthUser {
 	if v := r.Context().Value(userContextKey); v != nil {
 		if u, ok := v.(*AuthUser); ok {

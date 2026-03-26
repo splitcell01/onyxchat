@@ -29,8 +29,8 @@ func NewRouter(
 	// ---- middleware ----
 	InitHTTPMetrics()
 	r.Use(RequestID)
-	r.Use(func(next http.Handler) http.Handler { return AccessLogAndMetrics(log, next) })
 	r.Use(CORSMiddleware(allowedOrigins))
+	r.Use(func(next http.Handler) http.Handler { return AccessLogAndMetrics(log, next) })
 
 	// ---- limiters ----
 	ipLimiter := NewKeyedLimiter(rate.Limit(5), 10, 10*time.Minute)
@@ -40,28 +40,13 @@ func NewRouter(
 	upgrader := NewUpgrader(allowedOrigins, env)
 
 	// ---- basic routes ----
-	r.Handle("/metrics", promhttp.Handler()).Methods(http.MethodGet)
+	if env != "prod" {
+		r.Handle("/metrics", promhttp.Handler()).Methods(http.MethodGet)
+	}
 	r.HandleFunc("/health", HealthHandler).Methods(http.MethodGet)
 	r.HandleFunc("/healthz", HealthHandler).Methods(http.MethodGet)
 	r.HandleFunc("/health/live", LiveHandler).Methods(http.MethodGet)
 	r.HandleFunc("/health/ready", ReadyHandler(userStore)).Methods(http.MethodGet)
-
-	// ---- root auth ----
-	r.Handle("/register",
-		LoginIPRateLimit(ipLimiter)(
-			MaxBodyBytes(1<<20)(
-				http.HandlerFunc(RegisterHandler(userStore, jwtMgr)),
-			),
-		),
-	).Methods(http.MethodPost, http.MethodOptions)
-
-	r.Handle("/login",
-		LoginIPRateLimit(ipLimiter)(
-			MaxBodyBytes(1<<20)(
-				http.HandlerFunc(LoginHandler(userStore, jwtMgr, idLimiter)),
-			),
-		),
-	).Methods(http.MethodPost, http.MethodOptions)
 
 	// ---- /api/v1 ----
 	api := r.PathPrefix("/api/v1").Subrouter()
@@ -83,7 +68,7 @@ func NewRouter(
 
 	// ---- protected REST ----
 	protected := api.NewRoute().Subrouter()
-	protected.Use(AuthMiddleware(jwtMgr))
+	protected.Use(AuthMiddleware(jwtMgr, userStore, log))
 	protected.Use(PerUserRateLimit(userLimiter))
 
 	protected.HandleFunc("/users", ListUsersHandler(userStore)).Methods(http.MethodGet, http.MethodOptions)
@@ -127,8 +112,10 @@ func NewRouter(
 	).Methods(http.MethodPut, http.MethodOptions)
 
 	protected.HandleFunc("/keys/{username}", GetKeyHandler(userStore)).Methods(http.MethodGet, http.MethodOptions)
-	protected.HandleFunc("/ws/ticket", WSTicketHandler(rdb)).Methods(http.MethodPost, http.MethodOptions)
-
+	protected.Handle("/ws/ticket",
+		MaxBodyBytes(1<<20)(http.HandlerFunc(WSTicketHandler(rdb))),
+	).Methods(http.MethodPost, http.MethodOptions)
+	
 	// ---- websocket ----
 	ws := api.NewRoute().Subrouter()
 	ws.Use(WSAuthMiddleware(jwtMgr, rdb))
