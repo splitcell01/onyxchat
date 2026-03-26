@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useChat } from '../context/ChatContext'
 import { useAuth } from '../context/AuthContext'
+import { changePassword } from '../api/auth'
 
 const initials = (name: string) => name.slice(0, 2).toUpperCase()
 
