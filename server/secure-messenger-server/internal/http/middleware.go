@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -16,16 +15,6 @@ const userContextKey authContextKey = "authUser"
 type AuthUser struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
-}
-
-type errorResponse struct {
-	Error string `json:"error"`
-}
-
-func writeJSONError(w http.ResponseWriter, status int, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(errorResponse{Error: msg})
 }
 
 // AuthMiddleware validates Authorization: Bearer <token>
@@ -45,7 +34,7 @@ func AuthMiddleware(jwtMgr *JWTManager, userStore userStorer, log *zap.Logger) f
 					zap.String("method", r.Method),
 					zap.String("remote_addr", r.RemoteAddr),
 				)
-				writeJSONError(w, http.StatusUnauthorized, "missing authorization header")
+				http.Error(w, "missing authorization header", http.StatusUnauthorized)
 				return
 			}
 
@@ -56,7 +45,7 @@ func AuthMiddleware(jwtMgr *JWTManager, userStore userStorer, log *zap.Logger) f
 					zap.String("method", r.Method),
 					zap.String("remote_addr", r.RemoteAddr),
 				)
-				writeJSONError(w, http.StatusUnauthorized, "invalid authorization header")
+				http.Error(w, "invalid authorization header", http.StatusUnauthorized)
 				return
 			}
 
@@ -68,7 +57,7 @@ func AuthMiddleware(jwtMgr *JWTManager, userStore userStorer, log *zap.Logger) f
 					zap.String("remote_addr", r.RemoteAddr),
 					zap.Error(err),
 				)
-				writeJSONError(w, http.StatusUnauthorized, "invalid or expired token")
+				http.Error(w, "invalid or expired token", http.StatusUnauthorized)
 				return
 			}
 
@@ -81,7 +70,7 @@ func AuthMiddleware(jwtMgr *JWTManager, userStore userStorer, log *zap.Logger) f
 					zap.String("method", r.Method),
 					zap.Error(err),
 				)
-				writeJSONError(w, http.StatusUnauthorized, "account not found or deleted")
+				http.Error(w, "account not found or deleted", http.StatusUnauthorized)
 				return
 			}
 
