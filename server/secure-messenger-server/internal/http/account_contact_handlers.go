@@ -3,13 +3,13 @@ package http
 import (
 	"encoding/json"
 	"errors"
+	"golang.org/x/crypto/bcrypt"
 	"log"
 	"net/http"
 	"strings"
-	"golang.org/x/crypto/bcrypt"
 
-	"github.com/gorilla/mux"
 	"github.com/cole/secure-messenger-server/internal/store"
+	"github.com/gorilla/mux"
 )
 
 // ─────────────────────────────────────────────────────────────

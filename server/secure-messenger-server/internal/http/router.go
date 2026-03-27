@@ -6,7 +6,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/redis/go-redis/v9" // ← add this
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
@@ -30,7 +30,7 @@ func NewRouter(
 	InitHTTPMetrics()
 	r.Use(RequestID)
 	r.Use(CORSMiddleware(allowedOrigins))
-	r.Use(func(next http.Handler) http.Handler { return AccessLogAndMetrics(log, next) })
+	r.Use(AccessLogAndMetrics(log))
 
 	// ---- limiters ----
 	ipLimiter := NewKeyedLimiter(rate.Limit(5), 10, 10*time.Minute)
@@ -88,7 +88,7 @@ func NewRouter(
 		MaxBodyBytes(1<<20)(http.HandlerFunc(AddContactHandler(userStore))),
 	).Methods(http.MethodPost, http.MethodOptions)
 	protected.HandleFunc("/contacts/{username}", RemoveContactHandler(userStore)).Methods(http.MethodDelete, http.MethodOptions)
-	
+
 	// GDPR account deletion
 	protected.Handle("/account",
 		MaxBodyBytes(1<<20)(http.HandlerFunc(DeleteAccountHandler(userStore))),
@@ -103,7 +103,6 @@ func NewRouter(
 		MaxBodyBytes(1<<20)(http.HandlerFunc(AdminCreateInviteHandler(userStore)))).Methods(http.MethodPost, http.MethodOptions)
 	admin.HandleFunc("/admin/invites/{code}/reset", AdminResetInviteHandler(userStore)).Methods(http.MethodPost, http.MethodOptions)
 
-
 	// ---- E2E key endpoints ----
 	// PUT  /api/v1/keys          — upload your own public key
 	// GET  /api/v1/keys/{username} — fetch any user's public key
@@ -115,7 +114,7 @@ func NewRouter(
 	protected.Handle("/ws/ticket",
 		MaxBodyBytes(1<<20)(http.HandlerFunc(WSTicketHandler(rdb))),
 	).Methods(http.MethodPost, http.MethodOptions)
-	
+
 	// ---- websocket ----
 	ws := api.NewRoute().Subrouter()
 	ws.Use(WSAuthMiddleware(jwtMgr, rdb))

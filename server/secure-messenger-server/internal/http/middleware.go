@@ -30,9 +30,11 @@ func AuthMiddleware(jwtMgr *JWTManager, userStore userStorer, log *zap.Logger) f
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
 				log.Warn("auth failed: missing authorization header",
+					zap.String("request_id", GetRequestID(r)),
 					zap.String("path", r.URL.Path),
 					zap.String("method", r.Method),
 					zap.String("remote_addr", r.RemoteAddr),
+					zap.String("client_ip", clientIP(r)),
 				)
 				writeJSONError(w, http.StatusUnauthorized, "missing authorization header")
 				return
@@ -41,9 +43,11 @@ func AuthMiddleware(jwtMgr *JWTManager, userStore userStorer, log *zap.Logger) f
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
 				log.Warn("auth failed: invalid authorization header format",
+					zap.String("request_id", GetRequestID(r)),
 					zap.String("path", r.URL.Path),
 					zap.String("method", r.Method),
 					zap.String("remote_addr", r.RemoteAddr),
+					zap.String("client_ip", clientIP(r)),
 				)
 				writeJSONError(w, http.StatusUnauthorized, "invalid authorization header")
 				return
@@ -52,9 +56,11 @@ func AuthMiddleware(jwtMgr *JWTManager, userStore userStorer, log *zap.Logger) f
 			claims, err := jwtMgr.Parse(parts[1])
 			if err != nil {
 				log.Warn("auth failed: invalid or expired token",
+					zap.String("request_id", GetRequestID(r)),
 					zap.String("path", r.URL.Path),
 					zap.String("method", r.Method),
 					zap.String("remote_addr", r.RemoteAddr),
+					zap.String("client_ip", clientIP(r)),
 					zap.Error(err),
 				)
 				writeJSONError(w, http.StatusUnauthorized, "invalid or expired token")
@@ -64,10 +70,13 @@ func AuthMiddleware(jwtMgr *JWTManager, userStore userStorer, log *zap.Logger) f
 			_, err = userStore.GetUserByID(claims.UserID)
 			if err != nil {
 				log.Warn("auth failed: account not found or deleted",
+					zap.String("request_id", GetRequestID(r)),
 					zap.Int64("user_id", claims.UserID),
 					zap.String("username", claims.Username),
 					zap.String("path", r.URL.Path),
 					zap.String("method", r.Method),
+					zap.String("remote_addr", r.RemoteAddr),
+					zap.String("client_ip", clientIP(r)),
 					zap.Error(err),
 				)
 				writeJSONError(w, http.StatusUnauthorized, "account not found or deleted")

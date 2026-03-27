@@ -1,9 +1,9 @@
 package store
 
 import (
-    "errors"
-    "strings"
-    "time"
+	"errors"
+	"strings"
+	"time"
 )
 
 // ─────────────────────────────────────────────────────────────

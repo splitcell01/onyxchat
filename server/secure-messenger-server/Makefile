@@ -23,7 +23,7 @@ stop:
 
 # Rebuild images + run foreground
 rebuild:
-	$(COMPOSE) up --build
+	docker compose --env-file .env.dev up --build
 
 down:
 	$(COMPOSE) down

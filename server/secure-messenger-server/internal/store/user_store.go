@@ -8,9 +8,9 @@ import (
 )
 
 var (
-	ErrUserNotFound     = errors.New("user not found")
+	ErrUserNotFound      = errors.New("user not found")
 	ErrInvalidInviteCode = errors.New("invalid or already used invite code")
-	ErrUsernameTaken    = errors.New("username already taken")
+	ErrUsernameTaken     = errors.New("username already taken")
 )
 
 type User struct {

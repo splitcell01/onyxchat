@@ -6,13 +6,14 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"time"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
+	"strings"
 )
 
 type ctxKey string
@@ -25,6 +26,7 @@ func RequestID(next http.Handler) http.Handler {
 		if rid == "" {
 			rid = uuid.NewString()
 		}
+
 		w.Header().Set("X-Request-Id", rid)
 		ctx := context.WithValue(r.Context(), requestIDKey, rid)
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -33,8 +35,8 @@ func RequestID(next http.Handler) http.Handler {
 
 func GetRequestID(r *http.Request) string {
 	if v := r.Context().Value(requestIDKey); v != nil {
-		if s, ok := v.(string); ok {
-			return s
+		if rid, ok := v.(string); ok {
+			return rid
 		}
 	}
 	return ""
@@ -42,21 +44,19 @@ func GetRequestID(r *http.Request) string {
 
 type statusWriter struct {
 	http.ResponseWriter
-	status int
-	wrote  bool
+	status       int
+	bytesWritten int
 }
 
-func (sw *statusWriter) WriteHeader(code int) {
-	sw.status = code
-	sw.wrote = true
-	sw.ResponseWriter.WriteHeader(code)
+func (sw *statusWriter) WriteHeader(status int) {
+	sw.status = status
+	sw.ResponseWriter.WriteHeader(status)
 }
 
 func (sw *statusWriter) Write(b []byte) (int, error) {
-	if !sw.wrote {
-		sw.WriteHeader(http.StatusOK)
-	}
-	return sw.ResponseWriter.Write(b)
+	n, err := sw.ResponseWriter.Write(b)
+	sw.bytesWritten += n
+	return n, err
 }
 
 func (sw *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
@@ -194,32 +194,112 @@ func routeTemplate(r *http.Request) string {
 	return "unknown"
 }
 
-func AccessLogAndMetrics(log *zap.Logger, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		sw := &statusWriter{ResponseWriter: w, status: 200}
+func AccessLogAndMetrics(log *zap.Logger) mux.MiddlewareFunc {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			sw := &statusWriter{
+				ResponseWriter: w,
+				status:         http.StatusOK,
+			}
 
-		next.ServeHTTP(sw, r)
+			defer func() {
+				if rec := recover(); rec != nil {
+					log.Error("panic_recovered",
+						zap.String("request_id", GetRequestID(r)),
+						zap.String("method", r.Method),
+						zap.String("route", routeTemplate(r)),
+						zap.String("path", r.URL.Path),
+						zap.String("query", r.URL.RawQuery),
+						zap.String("client_ip", clientIP(r)),
+						zap.Any("panic", rec),
+					)
 
-		dur := time.Since(start)
-		route := routeTemplate(r)
-		statusStr := strconv.Itoa(sw.status)
+					if sw.bytesWritten == 0 {
+						writeJSONError(sw, http.StatusInternalServerError, "internal server error")
+					}
+				}
 
-		httpRequests.WithLabelValues(r.Method, route, statusStr).Inc()
-		httpDuration.WithLabelValues(r.Method, route).Observe(dur.Seconds())
+				dur := time.Since(start)
+				route := routeTemplate(r)
+				statusStr := strconv.Itoa(sw.status)
 
-		if sw.status == http.StatusTooManyRequests {
-			HTTPRateLimitRejections.WithLabelValues("http").Inc()
+				httpRequests.WithLabelValues(r.Method, route, statusStr).Inc()
+				httpDuration.WithLabelValues(r.Method, route).Observe(dur.Seconds())
+
+				if sw.status == http.StatusTooManyRequests {
+					HTTPRateLimitRejections.WithLabelValues("http").Inc()
+				}
+
+				fields := []zap.Field{
+					zap.String("request_id", GetRequestID(r)),
+					zap.String("method", r.Method),
+					zap.String("route", route),
+					zap.String("path", r.URL.Path),
+					zap.String("query", r.URL.RawQuery),
+					zap.Int("status", sw.status),
+					zap.Int64("duration_ms", dur.Milliseconds()),
+					zap.Duration("duration", dur),
+					zap.Int("bytes_written", sw.bytesWritten),
+					zap.String("remote_addr", r.RemoteAddr),
+					zap.String("client_ip", clientIP(r)),
+					zap.String("host", r.Host),
+					zap.String("proto", r.Proto),
+					zap.String("scheme", requestScheme(r)),
+					zap.String("user_agent", r.UserAgent()),
+					zap.String("referer", r.Referer()),
+					zap.String("origin", r.Header.Get("Origin")),
+					zap.String("content_type", r.Header.Get("Content-Type")),
+					zap.Int64("content_length", r.ContentLength),
+				}
+
+				if user := CurrentUser(r); user != nil {
+					fields = append(fields,
+						zap.Int64("user_id", user.ID),
+						zap.String("username", user.Username),
+					)
+				}
+
+				switch {
+				case sw.status >= 500:
+					log.Error("http_request", fields...)
+				case sw.status >= 400:
+					log.Warn("http_request", fields...)
+				default:
+					log.Info("http_request", fields...)
+				}
+			}()
+
+			next.ServeHTTP(sw, r)
+		})
+	}
+}
+
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		if len(parts) > 0 {
+			return strings.TrimSpace(parts[0])
 		}
+	}
 
-		log.Info("http_request",
-			zap.String("request_id", GetRequestID(r)),
-			zap.String("method", r.Method),
-			zap.String("route", route),
-			zap.String("path", r.URL.Path),
-			zap.Int("status", sw.status),
-			zap.Int64("duration_ms", dur.Milliseconds()),
-			zap.String("remote_addr", r.RemoteAddr),
-		)
-	})
+	if xrip := r.Header.Get("X-Real-Ip"); xrip != "" {
+		return strings.TrimSpace(xrip)
+	}
+
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil {
+		return host
+	}
+	return r.RemoteAddr
+}
+
+func requestScheme(r *http.Request) string {
+	if xfp := r.Header.Get("X-Forwarded-Proto"); xfp != "" {
+		return xfp
+	}
+	if r.TLS != nil {
+		return "https"
+	}
+	return "http"
 }
