@@ -34,7 +34,7 @@ func AuthMiddleware(jwtMgr *JWTManager, userStore userStorer, log *zap.Logger) f
 					zap.String("method", r.Method),
 					zap.String("remote_addr", r.RemoteAddr),
 				)
-				http.Error(w, "missing authorization header", http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "missing authorization header")
 				return
 			}
 
@@ -45,7 +45,7 @@ func AuthMiddleware(jwtMgr *JWTManager, userStore userStorer, log *zap.Logger) f
 					zap.String("method", r.Method),
 					zap.String("remote_addr", r.RemoteAddr),
 				)
-				http.Error(w, "invalid authorization header", http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "invalid authorization header")
 				return
 			}
 
@@ -57,7 +57,7 @@ func AuthMiddleware(jwtMgr *JWTManager, userStore userStorer, log *zap.Logger) f
 					zap.String("remote_addr", r.RemoteAddr),
 					zap.Error(err),
 				)
-				http.Error(w, "invalid or expired token", http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "invalid or expired token")
 				return
 			}
 
@@ -70,7 +70,7 @@ func AuthMiddleware(jwtMgr *JWTManager, userStore userStorer, log *zap.Logger) f
 					zap.String("method", r.Method),
 					zap.Error(err),
 				)
-				http.Error(w, "account not found or deleted", http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "account not found or deleted")
 				return
 			}
 
