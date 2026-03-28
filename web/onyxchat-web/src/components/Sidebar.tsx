@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useChat } from '../context/ChatContext'
 import { useAuth } from '../context/AuthContext'
 import { SettingsPanel } from './SettingsPanel'
+import { addContact } from '../api/contacts'
 
 const initials = (name: string) => name.slice(0, 2).toUpperCase()
 
@@ -9,14 +10,96 @@ export function Sidebar() {
   const { user, logout } = useAuth()
   const { contacts, activePeer, unread, selectPeer, loadContacts } = useChat()
   const [showSettings, setShowSettings] = useState(false)
+  const [showAddContact, setShowAddContact] = useState(false)
+  const [addUsername, setAddUsername] = useState('')
+  const [addError, setAddError] = useState('')
+  const [addLoading, setAddLoading] = useState(false)
+  const [addSuccess, setAddSuccess] = useState(false)
 
   useEffect(() => { loadContacts() }, [loadContacts])
 
   const online  = contacts.filter(c => c.online)
   const offline = contacts.filter(c => !c.online)
 
+  async function handleAddContact() {
+    setAddError('')
+    setAddSuccess(false)
+    if (!addUsername.trim()) return setAddError('Enter a username.')
+    setAddLoading(true)
+    try {
+      await addContact(addUsername.trim())
+      await loadContacts()
+      setAddSuccess(true)
+      setAddUsername('')
+      setTimeout(() => { setShowAddContact(false); setAddSuccess(false) }, 1200)
+    } catch (e) {
+      setAddError(e instanceof Error ? e.message : 'User not found.')
+    } finally {
+      setAddLoading(false)
+    }
+  }
+
   return (
     <>
+      {/* Add Contact Modal */}
+      {showAddContact && (
+        <div style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(2,6,23,0.8)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 100, padding: '20px',
+        }}>
+          <div style={{
+            width: '100%', maxWidth: '360px',
+            background: 'var(--bg-2)', border: '1px solid var(--border-2)',
+            borderRadius: '16px', padding: '24px',
+            display: 'flex', flexDirection: 'column', gap: '16px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text)' }}>Add Contact</span>
+              <button onClick={() => { setShowAddContact(false); setAddUsername(''); setAddError(''); setAddSuccess(false) }} style={{
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                color: 'var(--text-mute)', fontSize: '18px', lineHeight: 1, padding: '2px 6px', borderRadius: '6px',
+              }}>✕</button>
+            </div>
+            <input
+              autoFocus
+              value={addUsername}
+              onChange={e => { setAddUsername(e.target.value); setAddError('') }}
+              onKeyDown={e => e.key === 'Enter' && handleAddContact()}
+              placeholder="Username"
+              style={{
+                width: '100%', background: 'var(--bg-3)', border: '1px solid var(--border)',
+                borderRadius: '8px', color: 'var(--text)', fontSize: '14px',
+                padding: '10px 14px', outline: 'none', boxSizing: 'border-box',
+              }}
+            />
+            {addError && (
+              <div style={{
+                fontSize: '12px', color: 'var(--red)',
+                background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+                borderRadius: '8px', padding: '8px 12px',
+              }}>{addError}</div>
+            )}
+            {addSuccess && (
+              <div style={{
+                fontSize: '12px', color: 'var(--green)',
+                background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)',
+                borderRadius: '8px', padding: '8px 12px',
+              }}>Contact added! ✓</div>
+            )}
+            <button onClick={handleAddContact} disabled={addLoading} style={{
+              padding: '10px', background: 'var(--blue)', border: 'none',
+              borderRadius: '8px', color: 'white', fontSize: '13px',
+              fontWeight: 600, cursor: addLoading ? 'not-allowed' : 'pointer',
+              opacity: addLoading ? 0.6 : 1,
+            }}>
+              {addLoading ? 'Adding…' : 'Add Contact'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={{
         width: '260px', minWidth: '260px',
         display: 'flex', flexDirection: 'column',
@@ -34,6 +117,20 @@ export function Sidebar() {
             <circle cx="14" cy="6" r="1.5" fill="#2563eb" opacity="0.4"/>
           </svg>
           <span style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text)' }}>OnyxChat</span>
+        </div>
+
+        {/* Add Contact Button */}
+        <div style={{ padding: '8px 10px 0' }}>
+          <button onClick={() => { setShowAddContact(true); setAddError(''); setAddUsername('') }} style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
+            padding: '8px 12px', borderRadius: '8px',
+            background: 'var(--blue-glow)', border: '1px dashed rgba(37,99,235,0.4)',
+            color: 'var(--blue)', fontSize: '13px', fontWeight: 500,
+            cursor: 'pointer',
+          }}>
+            <span style={{ fontSize: '16px', lineHeight: 1 }}>+</span>
+            Add Contact
+          </button>
         </div>
 
         {/* Contacts */}
