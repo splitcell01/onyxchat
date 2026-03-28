@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
-import { api } from '../api/client'
+import { api, getToken } from '../api/client'
 import type { WSChatMessage, WSTyping, WSPresence } from '../types'
 
 type WSHandlers = {
@@ -24,6 +24,9 @@ export function useWebSocket(handlers: WSHandlers) {
   }, [handlers])
 
   const connect = useCallback(async () => {
+    // Don't attempt WS connection if we have no auth token
+    if (!getToken()) return
+
     if (reconnTimer.current) {
       clearTimeout(reconnTimer.current)
       reconnTimer.current = null
@@ -80,7 +83,7 @@ export function useWebSocket(handlers: WSHandlers) {
 
     socket.addEventListener('close', () => {
       ws.current = null
-      if (shouldReconnect.current) {
+      if (shouldReconnect.current && getToken()) {
         reconnTimer.current = setTimeout(connect, 3000)
       }
     })

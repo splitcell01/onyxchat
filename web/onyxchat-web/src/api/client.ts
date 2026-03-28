@@ -1,7 +1,7 @@
-const BASE_URL = import.meta.env.VITE_API_URL
+const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
 if (!BASE_URL) {
-  throw new Error('VITE_API_URL is not set')
+  console.error('[OnyxChat] VITE_API_URL is not set — API calls will fail.')
 }
 
 let token: string | null = sessionStorage.getItem('token')
@@ -17,6 +17,8 @@ export function getToken() {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  if (!BASE_URL) throw new Error('VITE_API_URL is not configured')
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   }
