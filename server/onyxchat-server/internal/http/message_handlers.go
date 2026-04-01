@@ -11,7 +11,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/cole/secure-messenger-server/internal/store"
+	"github.com/cole/onyxchat-server/internal/store"
 )
 
 const (

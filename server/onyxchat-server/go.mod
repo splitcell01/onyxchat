@@ -1,4 +1,4 @@
-module github.com/cole/secure-messenger-server
+module github.com/cole/onyxchat-server
 
 go 1.24.0
 

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cole/secure-messenger-server/internal/store"
+	"github.com/cole/onyxchat-server/internal/store"
 )
 
 func TestJWT_GenerateAndParse_RoundTrip(t *testing.T) {

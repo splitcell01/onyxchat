@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/cole/secure-messenger-server/internal/store"
+	"github.com/cole/onyxchat-server/internal/store"
 )
 
 // userStorer is the subset of *store.UserStore used by HTTP handlers.

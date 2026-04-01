@@ -2,8 +2,12 @@ name: Server CI
 
 on:
   pull_request:
+    paths:
+      - 'server/**'
   push:
-    branches: ["main", "master"]
+    branches: ["main"]
+    paths:
+      - 'server/**'
 
 permissions:
   contents: read
@@ -22,7 +26,7 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: .
+        working-directory: server/onyxchat-server
 
     services:
       postgres:
@@ -57,9 +61,9 @@ jobs:
 
       - uses: actions/setup-go@v5.3.0
         with:
-          go-version-file: go.mod
+          go-version-file: server/onyxchat-server/go.mod
           cache: true
-          cache-dependency-path: go.sum
+          cache-dependency-path: server/onyxchat-server/go.sum
 
       - name: gofmt check
         run: |
@@ -81,10 +85,10 @@ jobs:
       - name: build image (CI smoke-test)
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: Dockerfile
+          context: server/onyxchat-server
+          file: server/onyxchat-server/Dockerfile
           push: false
-          tags: secure-messenger-server:ci
+          tags: onyxchat-server:ci
           load: true
 
       - name: run container + health check
@@ -97,7 +101,7 @@ jobs:
           -e SM_SERVER_ADDR=":8080" \
           -e SM_DB_DSN="postgres://sm:sm@host.docker.internal:5432/sm?sslmode=disable" \
           -e SM_REDIS_ADDR="host.docker.internal:6379" \
-          secure-messenger-server:ci
+          onyxchat-server:ci
 
           for i in {1..60}; do
             if curl -fsS http://localhost:8080/health/ready >/dev/null; then
@@ -152,8 +156,8 @@ jobs:
       - name: build & push image to ECR
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: Dockerfile
+          context: server/onyxchat-server
+          file: server/onyxchat-server/Dockerfile
           push: true
           tags: |
             ${{ needs.ci.outputs.image_uri }}
@@ -175,4 +179,4 @@ jobs:
           aws ecs wait services-stable \
             --cluster "${{ env.ECS_CLUSTER }}" \
             --services "${{ env.ECS_SERVICE }}"
-          echo "✅ deployment stable"
+          echo "deployment stable"

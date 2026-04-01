@@ -1,9 +1,13 @@
-name: Java CI (Maven)
+name: Desktop CI (Maven)
 
 on:
   push:
-    branches: ["main", "master"]
+    branches: ["main"]
+    paths:
+      - 'desktop/**'
   pull_request:
+    paths:
+      - 'desktop/**'
 
 permissions:
   contents: read
@@ -22,4 +26,5 @@ jobs:
           cache: maven
 
       - name: Build (compile + package)
+        working-directory: desktop/onyxchat-desktop
         run: mvn -B -ntp clean package

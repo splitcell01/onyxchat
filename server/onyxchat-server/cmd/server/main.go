@@ -12,8 +12,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	serverhttp "github.com/cole/secure-messenger-server/internal/http"
-	"github.com/cole/secure-messenger-server/internal/store"
+	serverhttp "github.com/cole/onyxchat-server/internal/http"
+	"github.com/cole/onyxchat-server/internal/store"
 	"go.uber.org/zap"
 )
 

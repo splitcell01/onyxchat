@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/cole/secure-messenger-server/internal/store"
+	"github.com/cole/onyxchat-server/internal/store"
 	"golang.org/x/crypto/bcrypt"
 )
 

@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
-	"github.com/cole/secure-messenger-server/internal/store"
+	"github.com/cole/onyxchat-server/internal/store"
 )
 
 func NewRouter(

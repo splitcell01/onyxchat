@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cole/secure-messenger-server/internal/store"
+	"github.com/cole/onyxchat-server/internal/store"
 	"github.com/golang-jwt/jwt/v5"
 )
 
