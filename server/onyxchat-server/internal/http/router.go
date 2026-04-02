@@ -127,6 +127,6 @@ func NewRouter(
 	// ---- websocket ----
 	ws := api.NewRoute().Subrouter()
 	ws.Use(WSAuthMiddleware(jwtMgr, rdb))
-	ws.HandleFunc("/ws", WebSocketHandler(userStore, msgStore, hub, upgrader)).Methods(http.MethodGet)
+	ws.HandleFunc("/ws", WebSocketHandler(userStore, msgStore, hub, upgrader, log)).Methods(http.MethodGet)
 	return r
 }

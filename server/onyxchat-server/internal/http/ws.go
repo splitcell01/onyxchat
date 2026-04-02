@@ -4,10 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"net"
 	"net/http"
-	"strconv" // add this
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/cole/onyxchat-server/internal/store"
 	"github.com/gorilla/websocket"
+	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
 
@@ -62,6 +62,7 @@ type wsClient struct {
 	username string
 	conn     *websocket.Conn
 	send     chan []byte
+	log      *zap.Logger
 
 	closed atomic.Bool
 }
@@ -270,32 +271,34 @@ func WebSocketHandler(
 	msgStore messageStorer,
 	hub *Hub,
 	upgrader websocket.Upgrader,
+	log *zap.Logger,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sinceIDStr := r.URL.Query().Get("sinceId")
 		sinceID, _ := strconv.ParseInt(sinceIDStr, 10, 64)
 
-		log.Printf("WS request: path=%s query=%q", r.URL.Path, r.URL.RawQuery)
+		log.Info("[WebSocket] request", zap.String("path", r.URL.Path), zap.String("query", r.URL.RawQuery))
 
 		authUser := CurrentUser(r)
 		if authUser == nil {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		log.Printf("WS authorized user=%d username=%s", authUser.ID, authUser.Username)
+		log.Info("[WebSocket] authorized", zap.Int64("user", authUser.ID), zap.String("username", authUser.Username))
 
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			log.Printf("[WebSocket] upgrade failed: %v", err)
+			log.Error("[WebSocket] upgrade failed", zap.Error(err))
 			return
 		}
-		log.Printf("WS upgraded user=%d", authUser.ID)
+		log.Info("[WebSocket] upgraded", zap.Int64("user", authUser.ID))
 
 		c := &wsClient{
 			userID:   authUser.ID,
 			username: authUser.Username,
 			conn:     conn,
 			send:     make(chan []byte, sendQueueSize),
+			log:      log,
 		}
 
 		conn.SetReadLimit(maxWSMessageBytes)
@@ -336,15 +339,15 @@ func WebSocketHandler(
 		go c.writePump(wsCtx, cancel)
 		go c.readPump(wsCtx, cancel, userStore, hub)
 
-		log.Printf("[WebSocket] pumps started user=%d", c.userID)
+		log.Info("[WebSocket] pumps started", zap.Int64("user", c.userID))
 		<-wsCtx.Done()
-		log.Printf("[WebSocket] ctx done user=%d", c.userID)
+		log.Info("[WebSocket] ctx done", zap.Int64("user", c.userID))
 	}
 }
 
 func (c *wsClient) writePump(ctx context.Context, cancel context.CancelFunc) {
-	log.Printf("[WebSocket] writePump start user=%d", c.userID)
-	defer log.Printf("[WebSocket] writePump exit user=%d", c.userID)
+	c.log.Info("[WebSocket] writePump start", zap.Int64("user", c.userID))
+	defer c.log.Info("[WebSocket] writePump exit", zap.Int64("user", c.userID))
 	defer func() {
 		cancel()
 		c.close()
@@ -379,18 +382,18 @@ func (c *wsClient) writePump(ctx context.Context, cancel context.CancelFunc) {
 				return
 			}
 			if err := c.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-				log.Printf("[WebSocket] writePump write error user=%d: %v", c.userID, err)
+				c.log.Error("[WebSocket] writePump write error", zap.Int64("user", c.userID), zap.Error(err))
 				return
 			}
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				log.Printf("[WebSocket] writePump ping error user=%d: %v", c.userID, err)
+				c.log.Error("[WebSocket] writePump ping error", zap.Int64("user", c.userID), zap.Error(err))
 				return
 			}
 
 		case <-ticker.C:
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				log.Printf("[WebSocket] ping error user=%d: %v", c.userID, err)
+				c.log.Error("[WebSocket] ping error", zap.Int64("user", c.userID), zap.Error(err))
 				return
 			}
 		}
@@ -398,8 +401,8 @@ func (c *wsClient) writePump(ctx context.Context, cancel context.CancelFunc) {
 }
 
 func (c *wsClient) readPump(ctx context.Context, cancel context.CancelFunc, userStore userStorer, hub *Hub) {
-	log.Printf("[WebSocket] readPump start user=%d", c.userID)
-	defer log.Printf("[WebSocket] readPump exit user=%d", c.userID)
+	c.log.Info("[WebSocket] readPump start", zap.Int64("user", c.userID))
+	defer c.log.Info("[WebSocket] readPump exit", zap.Int64("user", c.userID))
 
 	limiter := rate.NewLimiter(rate.Limit(wsMsgsPerSecond), wsBurst)
 
@@ -416,7 +419,7 @@ func (c *wsClient) readPump(ctx context.Context, cancel context.CancelFunc, user
 		}
 		cancel()
 		c.close()
-		log.Printf("[WebSocket] user %d disconnected", c.userID)
+		c.log.Info("[WebSocket] user disconnected", zap.Int64("user", c.userID))
 	}()
 
 	for {
@@ -427,7 +430,7 @@ func (c *wsClient) readPump(ctx context.Context, cancel context.CancelFunc, user
 		}
 
 		if !limiter.Allow() {
-			log.Printf("[WebSocket] rate limit user=%d", c.userID)
+			c.log.Warn("[WebSocket] rate limit", zap.Int64("user", c.userID))
 			WSRateLimitRejections.Inc()
 			c.closeWith(websocket.ClosePolicyViolation, "rate limit")
 			return
@@ -436,19 +439,19 @@ func (c *wsClient) readPump(ctx context.Context, cancel context.CancelFunc, user
 		mt, data, err := c.conn.ReadMessage()
 		if err != nil {
 			if ce, ok := err.(*websocket.CloseError); ok {
-				log.Printf("[WebSocket] close user=%d code=%d text=%q", c.userID, ce.Code, ce.Text)
+				c.log.Info("[WebSocket] close", zap.Int64("user", c.userID), zap.Int("code", ce.Code), zap.String("text", ce.Text))
 				return
 			}
 			if ne, ok := err.(net.Error); ok && ne.Timeout() {
-				log.Printf("[WebSocket] timeout user=%d: %v", c.userID, err)
+				c.log.Warn("[WebSocket] timeout", zap.Int64("user", c.userID), zap.Error(err))
 				return
 			}
-			log.Printf("[WebSocket] read error user=%d: %v", c.userID, err)
+			c.log.Error("[WebSocket] read error", zap.Int64("user", c.userID), zap.Error(err))
 			return
 		}
 
 		if mt != websocket.TextMessage {
-			log.Printf("[WebSocket] unsupported message type user=%d mt=%d", c.userID, mt)
+			c.log.Warn("[WebSocket] unsupported message type", zap.Int64("user", c.userID), zap.Int("mt", mt))
 			continue
 		}
 
@@ -456,7 +459,7 @@ func (c *wsClient) readPump(ctx context.Context, cancel context.CancelFunc, user
 			Type string `json:"type"`
 		}
 		if err := json.Unmarshal(data, &base); err != nil {
-			log.Printf("[WebSocket] invalid JSON user=%d: %v", c.userID, err)
+			c.log.Warn("[WebSocket] invalid JSON", zap.Int64("user", c.userID), zap.Error(err))
 			continue
 		}
 
@@ -466,24 +469,24 @@ func (c *wsClient) readPump(ctx context.Context, cancel context.CancelFunc, user
 		case "typing":
 			var ti TypingIncoming
 			if err := json.Unmarshal(data, &ti); err != nil {
-				log.Printf("[WebSocket] invalid typing JSON user=%d: %v", c.userID, err)
+				c.log.Warn("[WebSocket] invalid typing JSON", zap.Int64("user", c.userID), zap.Error(err))
 				continue
 			}
 
 			toUser, err := userStore.GetUserByUsername(ti.To)
 			if err != nil {
 				if errors.Is(err, store.ErrUserNotFound) {
-					log.Printf("[WebSocket] typing to unknown user=%d to=%q", c.userID, ti.To)
+					c.log.Warn("[WebSocket] typing to unknown user", zap.Int64("user", c.userID), zap.String("to", ti.To))
 					continue
 				}
-				log.Printf("[WebSocket] typing lookup error user=%d to=%q: %v", c.userID, ti.To, err)
+				c.log.Error("[WebSocket] typing lookup error", zap.Int64("user", c.userID), zap.String("to", ti.To), zap.Error(err))
 				continue
 			}
 
 			hub.SendTypingToUser(c.username, toUser.ID, toUser.Username, ti.IsTyping)
 
 		default:
-			log.Printf("[WebSocket] unknown message type user=%d type=%q", c.userID, base.Type)
+			c.log.Warn("[WebSocket] unknown message type", zap.Int64("user", c.userID), zap.String("type", base.Type))
 		}
 	}
 }
