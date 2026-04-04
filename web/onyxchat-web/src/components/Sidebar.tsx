@@ -10,6 +10,7 @@ const initials = (name: string) => name.slice(0, 2).toUpperCase()
 export function Sidebar() {
   const { user, logout } = useAuth()
   const { contacts, activePeer, unread, selectPeer, loadContacts } = useChat()
+  const [contactsLoaded, setContactsLoaded] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showAddContact, setShowAddContact] = useState(false)
   const [addUsername, setAddUsername] = useState('')
@@ -20,7 +21,7 @@ export function Sidebar() {
   const [showDropdown, setShowDropdown] = useState(false)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => { loadContacts() }, [loadContacts])
+  useEffect(() => { loadContacts().finally(() => setContactsLoaded(true)) }, [loadContacts])
 
   const online  = contacts.filter(c => c.online)
   const offline = contacts.filter(c => !c.online)
@@ -228,7 +229,7 @@ export function Sidebar() {
               {offline.map(c => <ContactItem key={c.id} contact={c} active={activePeer?.username === c.username} unread={unread[c.username] ?? 0} onClick={() => selectPeer(c.username)} />)}
             </>
           )}
-          {contacts.length === 0 && (
+          {contactsLoaded && contacts.length === 0 && (
             <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-mute)', fontSize: '12px' }}>
               No contacts yet
             </div>
