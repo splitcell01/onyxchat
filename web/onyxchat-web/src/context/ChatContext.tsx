@@ -49,8 +49,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const lastMsgId     = useRef<Record<string, number>>({})
   const contactsRef   = useRef<Contact[]>([])
 
-  // Shared key cache: username → CryptoKey (AES-256-GCM)
-  const sharedKeyCache = useRef<Map<string, CryptoKey>>(new Map())
+  // Shared key cache: username → { key, publicKeyB64 }
+  // We cache the peer's public key fingerprint alongside the derived key.
+  // If the peer's public key on the server has changed, we re-derive.
+  const sharedKeyCache = useRef<Map<string, { key: CryptoKey; pubKey: string }>>(new Map())
 
   activePeerRef.current = activePeer
   useEffect(() => { contactsRef.current = contacts }, [contacts])
@@ -58,15 +60,17 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // ── Shared key helper ──────────────────────────────────────────────────────
 
   const getSharedKey = useCallback(async (peerUsername: string): Promise<CryptoKey | null> => {
-    const cached = sharedKeyCache.current.get(peerUsername)
-    if (cached) return cached
-
     const theirPubKeyB64 = await fetchPublicKey(peerUsername)
     if (!theirPubKeyB64) return null
 
+    // Return cached key only if the peer's public key hasn't changed
+    const cached = sharedKeyCache.current.get(peerUsername)
+    if (cached && cached.pubKey === theirPubKeyB64) return cached.key
+
+    // Derive fresh shared key (peer rotated their keypair, or first time)
     const kp        = await getOrCreateKeyPair()
     const sharedKey = await deriveSharedKey(kp.privateKey, theirPubKeyB64)
-    sharedKeyCache.current.set(peerUsername, sharedKey)
+    sharedKeyCache.current.set(peerUsername, { key: sharedKey, pubKey: theirPubKeyB64 })
     return sharedKey
   }, [])
 
@@ -215,13 +219,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         return { ...prev, [activePeer.username]: arr }
       })
     } catch {
-      // Mark message as failed instead of removing it — user can see what didn't send
-      setMessages(prev => {
-        const arr = [...(prev[activePeer.username] ?? [])]
-        const idx = arr.findIndex(m => m.id === optimistic.id)
-        if (idx >= 0) arr[idx] = { ...optimistic, failed: true }
-        return { ...prev, [activePeer.username]: arr }
-      })
+      // Remove optimistic message on failure
+      setMessages(prev => ({
+        ...prev,
+        [activePeer.username]: (prev[activePeer.username] ?? []).filter(
+          m => m.id !== optimistic.id,
+        ),
+      }))
     }
   }, [activePeer, user, getSharedKey])
 
