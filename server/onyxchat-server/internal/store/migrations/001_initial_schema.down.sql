@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS contacts;
+DROP TABLE IF EXISTS gdpr_deletion_log;
+DROP TABLE IF EXISTS invite_codes;
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS users;

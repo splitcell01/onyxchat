@@ -16,6 +16,7 @@ type userStorer interface {
 	GetByUsername(username string) (*store.User, error)
 	GetUserByID(userID int64) (*store.User, error)
 	ListUsers() ([]*store.User, error)
+	SearchUsers(query string) ([]*store.User, error)
 	ConsumeInviteCode(code, username string) error
 	SetPublicKey(userID int64, pubKey string) error
 	GetPublicKeyByUsername(username string) (string, error)

@@ -278,7 +278,14 @@ type UserResponse struct {
 
 func ListUsersHandler(userStore userStorer, log *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		users, err := userStore.ListUsers()
+		var users []*store.User
+		var err error
+
+		if q := strings.TrimSpace(r.URL.Query().Get("search")); q != "" {
+			users, err = userStore.SearchUsers(q)
+		} else {
+			users, err = userStore.ListUsers()
+		}
 		if err != nil {
 			log.Error("[ListUsers] failed to list users", zap.Error(err))
 			writeJSONError(w, http.StatusInternalServerError, "failed to list users")

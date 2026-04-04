@@ -135,6 +135,27 @@ func (s *UserStore) GetUserByUsername(username string) (*User, error) {
 	return &u, nil
 }
 
+func (s *UserStore) SearchUsers(query string) ([]*User, error) {
+	rows, err := s.db.Query(
+		`SELECT id, username FROM users WHERE deleted_at IS NULL AND username ILIKE $1 ORDER BY username ASC LIMIT 10`,
+		"%"+query+"%",
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Username); err != nil {
+			return nil, err
+		}
+		users = append(users, &u)
+	}
+	return users, rows.Err()
+}
+
 func (s *UserStore) ListUsers() ([]*User, error) {
 	rows, err := s.db.Query(
 		`SELECT id, username FROM users WHERE deleted_at IS NULL ORDER BY username ASC`,

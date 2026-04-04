@@ -69,8 +69,8 @@ func main() {
 
 	// DB
 	db := store.MustOpen()
-	if err := store.EnsureSchema(db); err != nil {
-		logger.Fatal("failed to ensure schema", zap.Error(err))
+	if err := store.RunMigrations(db); err != nil {
+		logger.Fatal("failed to run migrations", zap.Error(err))
 	}
 	defer db.Close()
 
@@ -109,26 +109,36 @@ func main() {
 	jwtMgr := serverhttp.NewJWTManager(jwtSecret)
 	publisher := &serverhttp.RedisPublisher{Client: rdb}
 
-	// Start Redis subscriber with reconnect loop
+	// Start Redis subscribers with reconnect loops
 	subscriberCtx, subscriberCancel := context.WithCancel(context.Background())
 	defer subscriberCancel()
-	go func() {
-		for {
-			select {
-			case <-subscriberCtx.Done():
-				return
-			default:
+
+	startSubscriber := func(name string, fn func(context.Context) error) {
+		go func() {
+			for {
+				select {
+				case <-subscriberCtx.Done():
+					return
+				default:
+				}
+				if err := fn(subscriberCtx); err != nil {
+					logger.Error("subscriber exited, restarting in 2s", zap.String("subscriber", name), zap.Error(err))
+				}
+				select {
+				case <-subscriberCtx.Done():
+					return
+				case <-time.After(2 * time.Second):
+				}
 			}
-			if err := serverhttp.StartMessageSubscriber(subscriberCtx, rdb, messageStore, hub, logger); err != nil {
-				logger.Error("message subscriber exited, restarting in 2s", zap.Error(err))
-			}
-			select {
-			case <-subscriberCtx.Done():
-				return
-			case <-time.After(2 * time.Second):
-			}
-		}
-	}()
+		}()
+	}
+
+	startSubscriber("messages", func(ctx context.Context) error {
+		return serverhttp.StartMessageSubscriber(ctx, rdb, messageStore, hub, logger)
+	})
+	startSubscriber("presence", func(ctx context.Context) error {
+		return serverhttp.StartPresenceSubscriber(ctx, rdb, hub, logger)
+	})
 
 	// Admin username
 	adminUsername := os.Getenv("SM_ADMIN_USERNAME")

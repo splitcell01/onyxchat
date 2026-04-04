@@ -91,24 +91,23 @@ func (c *wsClient) closeWith(code int, reason string) {
 }
 
 // ---- Hub ----
+// Hub tracks locally connected WebSocket clients for message/typing routing.
+// Presence state (online/offline) is managed by PresenceStore via Redis so it
+// works correctly across multiple server instances.
 
 type Hub struct {
 	mu sync.RWMutex
 
 	clientsByUser map[int64]map[*wsClient]struct{}
-	onlineCount   map[int64]int
-	usernames     map[int64]string
 }
 
 func NewHub() *Hub {
 	return &Hub{
 		clientsByUser: make(map[int64]map[*wsClient]struct{}),
-		onlineCount:   make(map[int64]int),
-		usernames:     make(map[int64]string),
 	}
 }
 
-func (h *Hub) addClient(c *wsClient) (snapshot []PresenceEvent, becameOnline bool) {
+func (h *Hub) addClient(c *wsClient) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -118,53 +117,20 @@ func (h *Hub) addClient(c *wsClient) (snapshot []PresenceEvent, becameOnline boo
 		h.clientsByUser[c.userID] = set
 	}
 	set[c] = struct{}{}
-
-	prev := h.onlineCount[c.userID]
-	h.onlineCount[c.userID] = prev + 1
-	h.usernames[c.userID] = c.username
-
-	// build snapshot while locked (fast, memory only)
-	for uid, cnt := range h.onlineCount {
-		if cnt <= 0 {
-			continue
-		}
-		un := h.usernames[uid]
-		snapshot = append(snapshot, PresenceEvent{
-			Type:       "presence",
-			UserID:     uid,
-			Username:   un,
-			Status:     "online",
-			IsSnapshot: true,
-		})
-	}
-
-	becameOnline = (prev == 0)
-	return snapshot, becameOnline
 }
 
-func (h *Hub) removeClient(c *wsClient) (becameOffline bool) {
+func (h *Hub) removeClient(c *wsClient) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	set := h.clientsByUser[c.userID]
 	if set == nil {
-		return false
+		return
 	}
-
 	delete(set, c)
 	if len(set) == 0 {
 		delete(h.clientsByUser, c.userID)
 	}
-
-	prev := h.onlineCount[c.userID]
-	if prev <= 1 {
-		delete(h.onlineCount, c.userID)
-		delete(h.usernames, c.userID)
-		return true
-	}
-
-	h.onlineCount[c.userID] = prev - 1
-	return false
 }
 
 func (h *Hub) broadcastJSON(v any) {
@@ -270,6 +236,7 @@ func WebSocketHandler(
 	userStore userStorer,
 	msgStore messageStorer,
 	hub *Hub,
+	presenceStore *PresenceStore,
 	upgrader websocket.Upgrader,
 	log *zap.Logger,
 ) http.HandlerFunc {
@@ -308,9 +275,26 @@ func WebSocketHandler(
 			return nil
 		})
 
-		snapshot, becameOnline := hub.addClient(c)
+		hub.addClient(c)
+		ActiveWSConnections.Inc()
 
-		if becameOnline && sinceID >= 0 {
+		// Register with distributed presence and send snapshot of all online users.
+		presenceCtx := r.Context()
+		if _, err := presenceStore.Connect(presenceCtx, c.userID, c.username); err != nil {
+			log.Warn("[WebSocket] presence connect error", zap.Int64("user", c.userID), zap.Error(err))
+		}
+
+		snapshot, err := presenceStore.GetSnapshot(presenceCtx)
+		if err != nil {
+			log.Warn("[WebSocket] presence snapshot error", zap.Int64("user", c.userID), zap.Error(err))
+		}
+		for _, evt := range snapshot {
+			b, _ := json.Marshal(evt)
+			enqueueDropSlow(c, b)
+		}
+
+		// Deliver any messages the client missed while disconnected.
+		if sinceID >= 0 {
 			unread, err := msgStore.GetUnreadForUser(c.userID, sinceID)
 			if err == nil {
 				for _, msg := range unread {
@@ -319,25 +303,9 @@ func WebSocketHandler(
 			}
 		}
 
-		ActiveWSConnections.Inc()
-
-		for _, evt := range snapshot {
-			b, _ := json.Marshal(evt)
-			enqueueDropSlow(c, b)
-		}
-
-		if becameOnline {
-			hub.broadcastJSON(PresenceEvent{
-				Type:     "presence",
-				UserID:   c.userID,
-				Username: c.username,
-				Status:   "online",
-			})
-		}
-
 		wsCtx, cancel := context.WithCancel(r.Context())
 		go c.writePump(wsCtx, cancel)
-		go c.readPump(wsCtx, cancel, userStore, hub)
+		go c.readPump(wsCtx, cancel, userStore, hub, presenceStore)
 
 		log.Info("[WebSocket] pumps started", zap.Int64("user", c.userID))
 		<-wsCtx.Done()
@@ -400,7 +368,7 @@ func (c *wsClient) writePump(ctx context.Context, cancel context.CancelFunc) {
 	}
 }
 
-func (c *wsClient) readPump(ctx context.Context, cancel context.CancelFunc, userStore userStorer, hub *Hub) {
+func (c *wsClient) readPump(ctx context.Context, cancel context.CancelFunc, userStore userStorer, hub *Hub, presenceStore *PresenceStore) {
 	c.log.Info("[WebSocket] readPump start", zap.Int64("user", c.userID))
 	defer c.log.Info("[WebSocket] readPump exit", zap.Int64("user", c.userID))
 
@@ -408,14 +376,10 @@ func (c *wsClient) readPump(ctx context.Context, cancel context.CancelFunc, user
 
 	defer func() {
 		ActiveWSConnections.Dec()
-		becameOffline := hub.removeClient(c)
-		if becameOffline {
-			hub.broadcastJSON(PresenceEvent{
-				Type:     "presence",
-				UserID:   c.userID,
-				Username: c.username,
-				Status:   "offline",
-			})
+		hub.removeClient(c)
+		disconnectCtx := context.Background()
+		if _, err := presenceStore.Disconnect(disconnectCtx, c.userID, c.username); err != nil {
+			c.log.Warn("[WebSocket] presence disconnect error", zap.Int64("user", c.userID), zap.Error(err))
 		}
 		cancel()
 		c.close()

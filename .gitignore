@@ -18,6 +18,12 @@
 # Zip archives
 *.zip
 
+# AWS policy scratch files (contain account ID, applied manually outside Terraform)
+ecs-deploy-failed-pattern.json
+onyxchat-ssm-prod-policy.json
+sm-admin-username-policy.json
+sns-eventbridge-policy.json
+
 # Secrets
 *.env
 .env.*

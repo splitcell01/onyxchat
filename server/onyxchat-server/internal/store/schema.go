@@ -2,37 +2,45 @@ package store
 
 import (
 	"database/sql"
-	_ "embed"
+	"embed"
+	"errors"
 	"fmt"
 	"log"
-	"time"
+
+	"github.com/golang-migrate/migrate/v4"
+	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
 
-//go:embed schema/init.sql
-var initSQL string
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
 
-func EnsureSchema(db *sql.DB) error {
-	const lockKey int64 = 8675309
-	start := time.Now()
-
-	log.Println("[DB] ensuring schema (acquiring advisory lock)")
-
-	if _, err := db.Exec(`SELECT pg_advisory_lock($1)`, lockKey); err != nil {
-		return fmt.Errorf("advisory lock failed: %w", err)
-	}
-	defer func() {
-		if _, err := db.Exec(`SELECT pg_advisory_unlock($1)`, lockKey); err != nil {
-			log.Printf("[DB] advisory unlock failed (non-fatal): %v", err)
-		}
-	}()
-
-	if initSQL == "" {
-		return fmt.Errorf("embedded schema/init.sql is empty")
-	}
-	if _, err := db.Exec(initSQL); err != nil {
-		return fmt.Errorf("init schema failed: %w", err)
+// RunMigrations applies all pending migrations. Safe to call on startup —
+// it is a no-op when the database is already at the latest version.
+func RunMigrations(db *sql.DB) error {
+	src, err := iofs.New(migrationsFS, "migrations")
+	if err != nil {
+		return fmt.Errorf("create migration source: %w", err)
 	}
 
-	log.Printf("[DB] schema OK (took %s)", time.Since(start))
+	driver, err := migratepgx.WithInstance(db, &migratepgx.Config{})
+	if err != nil {
+		return fmt.Errorf("create migration driver: %w", err)
+	}
+
+	m, err := migrate.NewWithInstance("iofs", src, "pgx5", driver)
+	if err != nil {
+		return fmt.Errorf("create migrator: %w", err)
+	}
+
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("run migrations: %w", err)
+	}
+
+	v, _, err := m.Version()
+	if err != nil && !errors.Is(err, migrate.ErrNilVersion) {
+		return fmt.Errorf("check migration version: %w", err)
+	}
+	log.Printf("[DB] migrations OK (version %d)", v)
 	return nil
 }

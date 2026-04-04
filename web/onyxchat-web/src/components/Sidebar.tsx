@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useChat } from '../context/ChatContext'
 import { useAuth } from '../context/AuthContext'
 import { SettingsPanel } from './SettingsPanel'
 import { addContact } from '../api/contacts'
+import { api } from '../api/client'
 
 const initials = (name: string) => name.slice(0, 2).toUpperCase()
 
@@ -15,11 +16,42 @@ export function Sidebar() {
   const [addError, setAddError] = useState('')
   const [addLoading, setAddLoading] = useState(false)
   const [addSuccess, setAddSuccess] = useState(false)
+  const [searchResults, setSearchResults] = useState<{ id: number; username: string }[]>([])
+  const [showDropdown, setShowDropdown] = useState(false)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => { loadContacts() }, [loadContacts])
 
   const online  = contacts.filter(c => c.online)
   const offline = contacts.filter(c => !c.online)
+
+  function handleSearchInput(value: string) {
+    setAddUsername(value)
+    setAddError('')
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    if (value.trim().length < 1) {
+      setSearchResults([])
+      setShowDropdown(false)
+      return
+    }
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const results = await api.get<{ id: number; username: string }[]>(
+          `/api/v1/users?search=${encodeURIComponent(value.trim())}`
+        )
+        setSearchResults(Array.isArray(results) ? results : [])
+        setShowDropdown(true)
+      } catch {
+        setSearchResults([])
+      }
+    }, 200)
+  }
+
+  function handleSelectResult(username: string) {
+    setAddUsername(username)
+    setShowDropdown(false)
+    setSearchResults([])
+  }
 
   async function handleAddContact() {
     setAddError('')
@@ -31,6 +63,7 @@ export function Sidebar() {
       await loadContacts()
       setAddSuccess(true)
       setAddUsername('')
+      setSearchResults([])
       setTimeout(() => { setShowAddContact(false); setAddSuccess(false) }, 1200)
     } catch (e) {
       setAddError(e instanceof Error ? e.message : 'User not found.')
@@ -57,23 +90,67 @@ export function Sidebar() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text)' }}>Add Contact</span>
-              <button onClick={() => { setShowAddContact(false); setAddUsername(''); setAddError(''); setAddSuccess(false) }} style={{
+              <button onClick={() => { setShowAddContact(false); setAddUsername(''); setAddError(''); setAddSuccess(false); setSearchResults([]); setShowDropdown(false) }} style={{
                 background: 'transparent', border: 'none', cursor: 'pointer',
                 color: 'var(--text-mute)', fontSize: '18px', lineHeight: 1, padding: '2px 6px', borderRadius: '6px',
               }}>✕</button>
             </div>
-            <input
-              autoFocus
-              value={addUsername}
-              onChange={e => { setAddUsername(e.target.value); setAddError('') }}
-              onKeyDown={e => e.key === 'Enter' && handleAddContact()}
-              placeholder="Username"
-              style={{
-                width: '100%', background: 'var(--bg-3)', border: '1px solid var(--border)',
-                borderRadius: '8px', color: 'var(--text)', fontSize: '14px',
-                padding: '10px 14px', outline: 'none', boxSizing: 'border-box',
-              }}
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                autoFocus
+                value={addUsername}
+                onChange={e => handleSearchInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { setShowDropdown(false); handleAddContact() } if (e.key === 'Escape') setShowDropdown(false) }}
+                onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+                placeholder="Search by username…"
+                style={{
+                  width: '100%', background: 'var(--bg-3)', border: '1px solid var(--border)',
+                  borderRadius: '8px', color: 'var(--text)', fontSize: '14px',
+                  padding: '10px 14px', outline: 'none', boxSizing: 'border-box',
+                }}
+              />
+              {showDropdown && searchResults.length > 0 && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+                  background: 'var(--bg-3)', border: '1px solid var(--border-2)',
+                  borderRadius: '8px', overflow: 'hidden', zIndex: 10,
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                }}>
+                  {searchResults.map(u => (
+                    <div
+                      key={u.id}
+                      onMouseDown={() => handleSelectResult(u.username)}
+                      style={{
+                        padding: '9px 14px', cursor: 'pointer', fontSize: '13px',
+                        color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '8px',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <span style={{
+                        width: '28px', height: '28px', borderRadius: '50%',
+                        background: 'var(--surface)', border: '1px solid var(--border-2)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', flexShrink: 0,
+                      }}>
+                        {u.username.slice(0, 2).toUpperCase()}
+                      </span>
+                      {u.username}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {showDropdown && searchResults.length === 0 && addUsername.trim().length > 0 && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+                  background: 'var(--bg-3)', border: '1px solid var(--border-2)',
+                  borderRadius: '8px', padding: '10px 14px', zIndex: 10,
+                  fontSize: '12px', color: 'var(--text-mute)',
+                }}>
+                  No users found
+                </div>
+              )}
+            </div>
             {addError && (
               <div style={{
                 fontSize: '12px', color: 'var(--red)',

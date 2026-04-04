@@ -51,6 +51,11 @@ variable "db_dsn_ssm_param" {
   default = "/onyxchat/prod/SM_DB_DSN"
 }
 
+variable "alert_email" {
+  type        = string
+  description = "Email address for CloudWatch alarm notifications."
+}
+
 variable "redis_auth_token" {
   type        = string
   sensitive   = true

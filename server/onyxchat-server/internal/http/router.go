@@ -39,6 +39,7 @@ func NewRouter(
 	userLimiter := NewKeyedLimiter(rate.Limit(10), 20, 10*time.Minute)
 
 	upgrader := NewUpgrader(allowedOrigins, env)
+	presenceStore := NewPresenceStore(rdb)
 
 	// ---- basic routes ----
 	if env != "prod" {
@@ -127,6 +128,6 @@ func NewRouter(
 	// ---- websocket ----
 	ws := api.NewRoute().Subrouter()
 	ws.Use(WSAuthMiddleware(jwtMgr, rdb))
-	ws.HandleFunc("/ws", WebSocketHandler(userStore, msgStore, hub, upgrader, log)).Methods(http.MethodGet)
+	ws.HandleFunc("/ws", WebSocketHandler(userStore, msgStore, hub, presenceStore, upgrader, log)).Methods(http.MethodGet)
 	return r
 }

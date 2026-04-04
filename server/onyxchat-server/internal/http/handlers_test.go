@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -79,6 +80,16 @@ func (f *fakeUserStore) ListUsers() ([]*store.User, error) {
 	out := make([]*store.User, 0, len(f.users))
 	for _, u := range f.users {
 		out = append(out, u)
+	}
+	return out, nil
+}
+
+func (f *fakeUserStore) SearchUsers(query string) ([]*store.User, error) {
+	out := make([]*store.User, 0)
+	for _, u := range f.users {
+		if strings.Contains(strings.ToLower(u.Username), strings.ToLower(query)) {
+			out = append(out, u)
+		}
 	}
 	return out, nil
 }
