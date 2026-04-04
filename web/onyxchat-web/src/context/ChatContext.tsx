@@ -215,13 +215,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         return { ...prev, [activePeer.username]: arr }
       })
     } catch {
-      // Remove optimistic message on failure
-      setMessages(prev => ({
-        ...prev,
-        [activePeer.username]: (prev[activePeer.username] ?? []).filter(
-          m => m.id !== optimistic.id,
-        ),
-      }))
+      // Mark message as failed instead of removing it — user can see what didn't send
+      setMessages(prev => {
+        const arr = [...(prev[activePeer.username] ?? [])]
+        const idx = arr.findIndex(m => m.id === optimistic.id)
+        if (idx >= 0) arr[idx] = { ...optimistic, failed: true }
+        return { ...prev, [activePeer.username]: arr }
+      })
     }
   }, [activePeer, user, getSharedKey])
 

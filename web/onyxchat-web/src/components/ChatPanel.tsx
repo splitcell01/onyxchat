@@ -123,16 +123,26 @@ export function ChatPanel() {
                     padding: '8px 12px',
                     borderRadius: isMe ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
                     fontSize: '13.5px', lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'pre-wrap',
-                    background: isMe ? 'linear-gradient(145deg, var(--blue), var(--blue-dim))' : 'var(--surface)',
-                    border: isMe ? 'none' : '1px solid var(--border-2)',
-                    color: isMe ? 'white' : 'var(--text)',
+                    background: msg.failed
+                      ? 'rgba(239,68,68,0.12)'
+                      : isMe ? 'linear-gradient(145deg, var(--blue), var(--blue-dim))' : 'var(--surface)',
+                    border: msg.failed
+                      ? '1px solid rgba(239,68,68,0.4)'
+                      : isMe ? 'none' : '1px solid var(--border-2)',
+                    color: msg.failed ? 'var(--red, #ef4444)' : isMe ? 'white' : 'var(--text)',
+                    opacity: msg.failed ? 0.85 : 1,
                   }}>
                     {msg.body}
                   </div>
                   <div style={{ fontSize: '10px', fontFamily: 'var(--mono)', color: 'var(--text-mute)', padding: '0 4px', display: 'flex', gap: '4px', alignItems: 'center' }}>
-                    {formatTime(msg.createdAt)}
-                    {/* Per-message lock icon for encrypted messages */}
-                    {msg.encrypted && <span title="Encrypted" style={{ opacity: 0.5 }}>🔒</span>}
+                    {msg.failed ? (
+                      <span style={{ color: 'var(--red, #ef4444)' }}>⚠ Failed to send</span>
+                    ) : (
+                      <>
+                        {formatTime(msg.createdAt)}
+                        {msg.encrypted && <span title="Encrypted" style={{ opacity: 0.5 }}>🔒</span>}
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

@@ -15,6 +15,8 @@ export interface Message {
   // E2E fields — present when encrypted === true
   iv?: string
   encrypted: boolean
+  // UI-only: true if send failed (never persisted to server)
+  failed?: boolean
 }
 
 export interface Contact extends User {

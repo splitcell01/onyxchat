@@ -29,12 +29,11 @@ func (s *MessageStore) Create(senderID, recipientID int64, body, iv string, encr
 }
 
 // ListConversationSince returns messages between two users with id > sinceID.
+// NOTE: Does not JOIN users — sender username is resolved on the frontend from contacts.
 func (s *MessageStore) ListConversationSince(userID, peerID, sinceID int64) ([]Message, error) {
 	rows, err := s.db.Query(
-		`SELECT m.id, m.sender_id, m.recipient_id, m.body, m.iv, m.encrypted, m.created_at,
-                COALESCE(u.display_name, u.username) AS sender_username
-         FROM messages m
-         LEFT JOIN users u ON u.id = m.sender_id
+		`SELECT id, sender_id, recipient_id, body, iv, encrypted, created_at
+         FROM messages
          WHERE ((sender_id = $1 AND recipient_id = $2)
              OR (sender_id = $3 AND recipient_id = $4))
            AND id > $5
@@ -52,8 +51,7 @@ func (s *MessageStore) ListConversationSince(userID, peerID, sinceID int64) ([]M
 	for rows.Next() {
 		var m Message
 		var ivVal sql.NullString
-		var senderUsername string
-		if err := rows.Scan(&m.ID, &m.SenderID, &m.RecipientID, &m.Body, &ivVal, &m.Encrypted, &m.CreatedAt, &senderUsername); err != nil {
+		if err := rows.Scan(&m.ID, &m.SenderID, &m.RecipientID, &m.Body, &ivVal, &m.Encrypted, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		m.IV = ivVal.String
