@@ -44,10 +44,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [typing,     setTyping]     = useState<Record<string, boolean>>({})
   const [unread,     setUnread]     = useState<Record<string, number>>({})
 
-  const typingTimers  = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
-  const activePeerRef = useRef<Contact | null>(null)
-  const lastMsgId     = useRef<Record<string, number>>({})
-  const contactsRef   = useRef<Contact[]>([])
+  const typingTimers    = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const activePeerRef   = useRef<Contact | null>(null)
+  const lastMsgId       = useRef<Record<string, number>>({})
+  const contactsRef     = useRef<Contact[]>([])
+  // Optimistic IDs are negative so they never collide with positive server IDs.
+  const optimisticIdSeq = useRef(-1)
 
   // Shared key cache: username → { key, publicKeyB64 }
   // We cache the peer's public key fingerprint alongside the derived key.
@@ -183,7 +185,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const clientMessageId = crypto.randomUUID()
 
     const optimistic: Message = {
-      id:          Date.now(),
+      id:          optimisticIdSeq.current--,
       senderId:    user.id,
       recipientId: activePeer.id,
       body:        plaintext,
@@ -226,13 +228,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         return { ...prev, [activePeer.username]: arr }
       })
     } catch {
-      // Remove optimistic message on failure
-      setMessages(prev => ({
-        ...prev,
-        [activePeer.username]: (prev[activePeer.username] ?? []).filter(
-          m => m.id !== optimistic.id,
-        ),
-      }))
+      // Mark optimistic message as failed so the user can see it didn't send
+      setMessages(prev => {
+        const arr = (prev[activePeer.username] ?? []).map(m =>
+          m.id === optimistic.id ? { ...m, failed: true } : m,
+        )
+        return { ...prev, [activePeer.username]: arr }
+      })
     }
   }, [activePeer, user, getSharedKey])
 

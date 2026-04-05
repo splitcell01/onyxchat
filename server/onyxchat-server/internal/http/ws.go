@@ -439,11 +439,22 @@ func (c *wsClient) readPump(ctx context.Context, cancel context.CancelFunc, user
 
 			toUser, err := userStore.GetUserByUsername(ti.To)
 			if err != nil {
-				if errors.Is(err, store.ErrUserNotFound) {
-					c.log.Warn("[WebSocket] typing to unknown user", zap.Int64("user", c.userID), zap.String("to", ti.To))
-					continue
+				// Don't reveal whether the username exists — just drop silently.
+				if !errors.Is(err, store.ErrUserNotFound) {
+					c.log.Error("[WebSocket] typing lookup error", zap.Int64("user", c.userID), zap.String("to", ti.To), zap.Error(err))
 				}
-				c.log.Error("[WebSocket] typing lookup error", zap.Int64("user", c.userID), zap.String("to", ti.To), zap.Error(err))
+				continue
+			}
+
+			// Only forward typing indicators between mutual contacts.
+			// Without this check any user could probe for valid usernames or
+			// spam typing notifications to arbitrary accounts.
+			ok, err := userStore.IsContact(c.userID, toUser.ID)
+			if err != nil {
+				c.log.Error("[WebSocket] typing contact check error", zap.Int64("user", c.userID), zap.Error(err))
+				continue
+			}
+			if !ok {
 				continue
 			}
 

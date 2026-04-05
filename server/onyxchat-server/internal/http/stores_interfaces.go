@@ -27,6 +27,7 @@ type userStorer interface {
 	UpdatePassword(userID int64, newHash string) error
 
 	ListContacts(userID int64) ([]*store.Contact, error)
+	IsContact(userID, peerID int64) (bool, error)
 	AddContact(userID int64, username string) error
 	RemoveContact(userID int64, username string) error
 	DeleteAccountGDPR(userID int64) (*store.GDPRDeletionRecord, error)

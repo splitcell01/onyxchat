@@ -131,6 +131,10 @@ func (f *fakeUserStore) ListContacts(userID int64) ([]*store.Contact, error) {
 	return []*store.Contact{}, nil
 }
 
+func (f *fakeUserStore) IsContact(userID, peerID int64) (bool, error) {
+	return false, nil
+}
+
 func (f *fakeUserStore) AddContact(userID int64, targetUsername string) error {
 	return nil
 }

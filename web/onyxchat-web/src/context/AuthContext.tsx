@@ -30,13 +30,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // On mount: if we have a stored refresh token but lost the session token,
   // silently get a new access token so the user doesn't have to log in again.
   useEffect(() => {
-  if (!getToken() && getRefreshToken()) {
-    apiRefresh().then(async newToken => {
-      if (!newToken) { setUser(null); return }
-      await publishKey()
-    })
-  }
-}, [])
+    if (getToken() || !getRefreshToken()) return
+
+    let mounted = true
+
+    apiRefresh()
+      .then(async newToken => {
+        if (!mounted) return
+        if (!newToken) { setUser(null); return }
+        await publishKey()
+      })
+      .catch(() => {
+        if (!mounted) return
+        setUser(null)
+      })
+
+    return () => { mounted = false }
+  }, [])
 
   async function handleLogin(username: string, password: string) {
     const data = await login(username, password)

@@ -2,14 +2,16 @@ package http
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/cole/onyxchat-server/internal/store"
 	"github.com/redis/go-redis/v9"
 )
 
-func WSAuthMiddleware(jwtMgr *JWTManager, rdb *redis.Client) func(http.Handler) http.Handler {
+func WSAuthMiddleware(jwtMgr *JWTManager, rdb *redis.Client, userStore userStorer) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var user *AuthUser
@@ -44,6 +46,18 @@ func WSAuthMiddleware(jwtMgr *JWTManager, rdb *redis.Client) func(http.Handler) 
 
 			if user == nil {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			// Verify the user still exists and has not been soft-deleted.
+			// Tickets and JWTs are issued before deletion and remain cryptographically
+			// valid afterward, so we must confirm liveness against the database.
+			if _, err := userStore.GetUserByID(user.ID); err != nil {
+				if errors.Is(err, store.ErrUserNotFound) {
+					http.Error(w, "unauthorized", http.StatusUnauthorized)
+				} else {
+					http.Error(w, "internal server error", http.StatusInternalServerError)
+				}
 				return
 			}
 

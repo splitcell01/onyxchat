@@ -181,6 +181,19 @@ func (s *UserStore) RemoveContact(userID int64, targetUsername string) error {
 	return nil
 }
 
+// IsContact reports whether peerID is in userID's contact list.
+// Used by the WebSocket handler to gate typing indicators.
+func (s *UserStore) IsContact(userID, peerID int64) (bool, error) {
+	var exists bool
+	err := s.db.QueryRow(`
+		SELECT EXISTS(
+			SELECT 1 FROM contacts
+			WHERE user_id = $1 AND contact_id = $2
+		)
+	`, userID, peerID).Scan(&exists)
+	return exists, err
+}
+
 // ListContacts returns contacts for a user, excluding deleted accounts.
 // Online status is not set here — the WS hub should populate it.
 func (s *UserStore) ListContacts(userID int64) ([]*Contact, error) {
