@@ -9,7 +9,7 @@
 // They never appear as raw bytes in JS memory.
 
 const DB_NAME    = 'onyxchat_e2e';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE      = 'keypairs';
 const KEY_ID     = 'local';
 
@@ -17,7 +17,10 @@ function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = e => {
-      (e.target as IDBOpenDBRequest).result.createObjectStore(STORE, { keyPath: 'id' });
+      const db = (e.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(STORE)) {
+        db.createObjectStore(STORE, { keyPath: 'id' });
+      }
     };
     req.onsuccess = e => resolve((e.target as IDBOpenDBRequest).result);
     req.onerror   = ()  => reject(req.error);
