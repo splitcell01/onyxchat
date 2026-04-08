@@ -1,4 +1,4 @@
-# OnyxChat
+# onyxchat — Distributed E2EE Messaging System (19K msgs/min)
 
 > A production-grade, end-to-end encrypted messaging platform built from scratch.  
 > Live at **[onyxchat.dev](https://onyxchat.dev)**
