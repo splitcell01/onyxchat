@@ -25,7 +25,7 @@ vi.mock('../api/contacts', () => ({
 }))
 
 vi.mock('../api/messages', () => ({
-  fetchMessages: vi.fn().mockResolvedValue([]),
+  fetchMessages: vi.fn().mockResolvedValue({ messages: [], hasMore: false }),
   sendMessage:   vi.fn(),
 }))
 
@@ -91,7 +91,7 @@ describe('sendMessage – failure', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
-    vi.mocked(messagesApi.fetchMessages).mockResolvedValue([])
+    vi.mocked(messagesApi.fetchMessages).mockResolvedValue({ messages: [], hasMore: false })
     await setup()
   })
 
@@ -139,7 +139,7 @@ describe('sendMessage – optimistic IDs', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
-    vi.mocked(messagesApi.fetchMessages).mockResolvedValue([])
+    vi.mocked(messagesApi.fetchMessages).mockResolvedValue({ messages: [], hasMore: false })
     // Both sends fail so both optimistic messages remain in the list
     vi.mocked(messagesApi.sendMessage).mockRejectedValue(new Error('network'))
     await setup()
@@ -174,7 +174,7 @@ describe('sendMessage – success', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
-    vi.mocked(messagesApi.fetchMessages).mockResolvedValue([])
+    vi.mocked(messagesApi.fetchMessages).mockResolvedValue({ messages: [], hasMore: false })
     await setup()
   })
 
@@ -245,7 +245,7 @@ describe('E2E encrypted path', () => {
 
     // Bob has uploaded his real public key
     vi.mocked(keysApi.fetchPublicKey).mockResolvedValue(bobPubKeyB64)
-    vi.mocked(messagesApi.fetchMessages).mockResolvedValue([])
+    vi.mocked(messagesApi.fetchMessages).mockResolvedValue({ messages: [], hasMore: false })
 
     // Alice's local keypair is the real one generated above
     vi.mocked(cryptoLib.getOrCreateKeyPair).mockResolvedValue(aliceKp)
