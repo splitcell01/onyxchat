@@ -21,8 +21,8 @@ resource "aws_iam_role" "github_deploy" {
         }
         StringLike = {
           "token.actions.githubusercontent.com:sub" = [
-            "repo:splitcell01/onyxchat:ref:refs/heads/main",
-            "repo:splitcell01/onyxchat-iac:ref:refs/heads/main"
+            "repo:colecschmidt/onyxchat:ref:refs/heads/main",
+            "repo:colecschmidt/onyxchat-iac:ref:refs/heads/main"
           ]
         }
       }
