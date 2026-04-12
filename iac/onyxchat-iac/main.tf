@@ -9,8 +9,12 @@ data "aws_subnets" "default" {
   }
 }
 
-data "aws_ssm_parameter" "db_dsn" {
-  name = "/onyxchat/prod/SM_DB_DSN"
+# Construct the DSN from the RDS-managed Secrets Manager secret so this
+# parameter stays in sync automatically on every terraform apply.
+resource "aws_ssm_parameter" "db_dsn" {
+  name  = var.db_dsn_ssm_param
+  type  = "SecureString"
+  value = "postgres://${local.rds_creds.username}:${urlencode(local.rds_creds.password)}@${aws_db_instance.postgres.address}:${aws_db_instance.postgres.port}/${var.db_name}"
 }
 
 data "aws_ssm_parameter" "db_host" {
@@ -65,7 +69,7 @@ resource "aws_iam_policy" "task_ssm_read" {
         Effect = "Allow"
         Action = ["ssm:GetParameter", "ssm:GetParameters"]
         Resource = [
-          data.aws_ssm_parameter.db_dsn.arn,
+          aws_ssm_parameter.db_dsn.arn,
           data.aws_ssm_parameter.jwt_secret.arn,
           data.aws_ssm_parameter.redis_auth_token.arn,
         ]
@@ -339,7 +343,7 @@ resource "aws_ecs_task_definition" "app" {
       environment = local.app_env
 
       secrets = [
-        { name = "SM_DB_DSN", valueFrom = data.aws_ssm_parameter.db_dsn.arn },
+        { name = "SM_DB_DSN", valueFrom = aws_ssm_parameter.db_dsn.arn },
         { name = "JWT_SECRET", valueFrom = data.aws_ssm_parameter.jwt_secret.arn },
         { name = "SM_REDIS_AUTH_TOKEN", valueFrom = data.aws_ssm_parameter.redis_auth_token.arn },
       ]
@@ -393,7 +397,8 @@ resource "aws_ecs_service" "app" {
 # ── Locals ─────────────────────────────────────────────────────────────────────
 
 locals {
-  subnets = data.aws_subnets.default.ids
+  subnets   = data.aws_subnets.default.ids
+  rds_creds = jsondecode(data.aws_secretsmanager_secret_version.rds_master.secret_string)
 
   app_env = [
     { name = "SM_ENV", value = "prod" },

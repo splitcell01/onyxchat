@@ -43,7 +43,7 @@ output "task_role_arn" {
 }
 
 output "ssm_db_dsn_param_name" {
-  value = data.aws_ssm_parameter.db_dsn.name
+  value = aws_ssm_parameter.db_dsn.name
 }
 
 output "redis_endpoint" {

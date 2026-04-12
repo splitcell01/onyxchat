@@ -8,6 +8,8 @@ resource "aws_db_instance" "postgres" {
   storage_type      = "gp3"
   storage_encrypted = true
 
+  manage_master_user_password = true
+
   # No DB name was set at creation time
   db_name = null
 
@@ -44,4 +46,10 @@ resource "aws_db_instance" "postgres" {
       ca_cert_identifier,
     ]
   }
+}
+
+# Read the RDS-managed password from Secrets Manager so Terraform can
+# keep the SSM DSN parameter in sync automatically.
+data "aws_secretsmanager_secret_version" "rds_master" {
+  secret_id = aws_db_instance.postgres.master_user_secret[0].secret_arn
 }
