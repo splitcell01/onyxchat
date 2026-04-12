@@ -117,7 +117,7 @@ func NewRouter(
 	// PUT  /api/v1/keys          — upload your own public key
 	// GET  /api/v1/keys/{username} — fetch any user's public key
 	protected.Handle("/keys",
-		MaxBodyBytes(4096)(http.HandlerFunc(UploadKeyHandler(userStore))),
+		MaxBodyBytes(4096)(http.HandlerFunc(UploadKeyHandler(userStore, hub, log))),
 	).Methods(http.MethodPut, http.MethodOptions)
 
 	protected.HandleFunc("/keys/{username}", GetKeyHandler(userStore)).Methods(http.MethodGet, http.MethodOptions)

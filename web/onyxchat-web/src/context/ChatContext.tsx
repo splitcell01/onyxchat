@@ -14,21 +14,23 @@ import {
   decryptMessage,
 } from '../lib/crypto'
 
-import type { Contact, Message, WSChatMessage, WSTyping, WSPresence } from '../types'
+import type { Contact, Message, WSChatMessage, WSTyping, WSPresence, WSKeyChanged } from '../types'
 import { fetchContacts } from '../api/contacts'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ChatState {
-  contacts:    Contact[]
-  messages:    Record<string, Message[]>
-  activePeer:  Contact | null
-  typing:      Record<string, boolean>
-  unread:      Record<string, number>
-  selectPeer:  (username: string) => void
-  sendMessage: (body: string) => Promise<void>
-  sendTyping:  (isTyping: boolean) => void
-  loadContacts: () => Promise<void>
+  contacts:         Contact[]
+  messages:         Record<string, Message[]>
+  hasMore:          Record<string, boolean>
+  activePeer:       Contact | null
+  typing:           Record<string, boolean>
+  unread:           Record<string, number>
+  selectPeer:       (username: string) => void
+  sendMessage:      (body: string) => Promise<void>
+  sendTyping:       (isTyping: boolean) => void
+  loadContacts:     () => Promise<void>
+  loadMoreMessages: (username: string) => Promise<void>
 }
 
 const ChatContext = createContext<ChatState | null>(null)
@@ -40,6 +42,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const [contacts,   setContacts]   = useState<Contact[]>([])
   const [messages,   setMessages]   = useState<Record<string, Message[]>>({})
+  const [hasMore,    setHasMore]    = useState<Record<string, boolean>>({})
   const [activePeer, setActivePeer] = useState<Contact | null>(null)
   const [typing,     setTyping]     = useState<Record<string, boolean>>({})
   const [unread,     setUnread]     = useState<Record<string, number>>({})
@@ -144,7 +147,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     ))
   }, [])
 
-  const { send } = useWebSocket({ onMessage, onTyping, onPresence }, !!user)
+  const onKeyChanged = useCallback((msg: WSKeyChanged) => {
+    // Evict the cached shared secret so it is re-derived with the new public key
+    // on the next send or decrypt. The next call to getSharedKey will re-fetch
+    // the peer's public key from the server and derive a fresh AES key.
+    sharedKeyCache.current.delete(msg.username)
+  }, [])
+
+  const { send } = useWebSocket({ onMessage, onTyping, onPresence, onKeyChanged }, !!user)
 
   // ── Contacts ───────────────────────────────────────────────────────────────
 
@@ -170,12 +180,31 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setUnread(prev => ({ ...prev, [username]: 0 }))
 
     if (!messages[username]) {
-      const raw      = await fetchMessages(username, 0)
+      const { messages: raw, hasMore: more } = await fetchMessages(username, 0)
       const decrypted = await Promise.all(raw.map(m => tryDecrypt(m, username)))
       setMessages(prev => ({ ...prev, [username]: decrypted }))
+      setHasMore(prev => ({ ...prev, [username]: more }))
       if (decrypted.length) lastMsgId.current[username] = decrypted[decrypted.length - 1].id
     }
   }, [contacts, messages, tryDecrypt])
+
+  // ── Load next page of history ─────────────────────────────────────────────
+
+  const loadMoreMessages = useCallback(async (username: string) => {
+    const sinceId = lastMsgId.current[username] ?? 0
+    const { messages: raw, hasMore: more } = await fetchMessages(username, sinceId)
+    if (!raw.length) return
+    const decrypted = await Promise.all(raw.map(m => tryDecrypt(m, username)))
+    setMessages(prev => {
+      const existing = prev[username] ?? []
+      // Guard against duplicates that may arrive via WS while we were fetching
+      const existingIds = new Set(existing.map(m => m.id))
+      const fresh = decrypted.filter(m => !existingIds.has(m.id))
+      return fresh.length ? { ...prev, [username]: [...existing, ...fresh] } : prev
+    })
+    setHasMore(prev => ({ ...prev, [username]: more }))
+    lastMsgId.current[username] = decrypted[decrypted.length - 1].id
+  }, [tryDecrypt])
 
   // ── Send (encrypt → optimistic → confirm) ─────────────────────────────────
 
@@ -247,8 +276,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   return (
     <ChatContext.Provider value={{
-      contacts, messages, activePeer, typing, unread,
-      selectPeer, sendMessage, sendTyping, loadContacts,
+      contacts, messages, hasMore, activePeer, typing, unread,
+      selectPeer, sendMessage, sendTyping, loadContacts, loadMoreMessages,
     }}>
       {children}
     </ChatContext.Provider>

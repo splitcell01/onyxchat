@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,8 +16,10 @@ import (
 )
 
 const (
-	maxUsernameLen = 32
-	maxMessageLen  = 8192 // bumped: ciphertext is larger than plaintext
+	maxUsernameLen  = 32
+	maxMessageLen   = 8192 // bumped: ciphertext is larger than plaintext
+	defaultPageSize = 50
+	maxPageSize     = 100
 )
 
 // ─────────────────────────────────────────────────────────────
@@ -65,8 +68,18 @@ func (r *SendMessageRequest) Validate() string {
 	if len(r.ClientMessageID) > 128 {
 		return "clientMessageId too long"
 	}
-	if r.Encrypted && r.IV == "" {
-		return "iv required when encrypted is true"
+	if r.Encrypted {
+		if r.IV == "" {
+			return "iv required when encrypted is true"
+		}
+		// The frontend encodes the IV with btoa() (standard base64). AES-GCM
+		// requires a 96-bit nonce: 12 bytes encodes to exactly 16 base64 characters
+		// (12 is divisible by 3, so no padding). Reject anything else so a
+		// malformed IV doesn't reach the DB and silently break decryption.
+		ivBytes, err := base64.StdEncoding.DecodeString(r.IV)
+		if err != nil || len(ivBytes) != 12 {
+			return "iv must be a base64-encoded 96-bit (12-byte) AES-GCM nonce"
+		}
 	}
 	return ""
 }
@@ -205,6 +218,7 @@ func SendMessageHandler(
 
 type ListMessagesResponse struct {
 	Messages []store.Message `json:"messages"`
+	HasMore  bool            `json:"hasMore"`
 }
 
 func ListMessagesHandler(userStore userStorer, msgStore messageStorer, log *zap.Logger) http.HandlerFunc {
@@ -229,6 +243,16 @@ func ListMessagesHandler(userStore userStorer, msgStore messageStorer, log *zap.
 			}
 		}
 
+		limit := defaultPageSize
+		if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+			if v, err := strconv.Atoi(limitStr); err == nil && v > 0 {
+				limit = v
+			}
+		}
+		if limit > maxPageSize {
+			limit = maxPageSize
+		}
+
 		peerUser, err := userStore.GetByUsername(peer)
 		if err != nil || peerUser == nil {
 			http.Error(w, "peer not found", http.StatusNotFound)
@@ -236,7 +260,7 @@ func ListMessagesHandler(userStore userStorer, msgStore messageStorer, log *zap.
 		}
 
 		dbStart := time.Now()
-		msgs, err := msgStore.ListConversationSince(currentUser.ID, peerUser.ID, sinceID)
+		msgs, hasMore, err := msgStore.ListConversationSince(currentUser.ID, peerUser.ID, sinceID, limit)
 		ObserveDBQuery("message_list", dbStart)
 		if err != nil {
 			log.Error("[ListMessages] failed to fetch messages", zap.Error(err))
@@ -245,7 +269,7 @@ func ListMessagesHandler(userStore userStorer, msgStore messageStorer, log *zap.
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(ListMessagesResponse{Messages: msgs}); err != nil {
+		if err := json.NewEncoder(w).Encode(ListMessagesResponse{Messages: msgs, HasMore: hasMore}); err != nil {
 			log.Error("[ListMessages] failed to write response", zap.Error(err))
 		}
 	}

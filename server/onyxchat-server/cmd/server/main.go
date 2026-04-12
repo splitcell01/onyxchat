@@ -137,7 +137,7 @@ func main() {
 		return serverhttp.StartMessageSubscriber(ctx, rdb, messageStore, hub, logger)
 	})
 	startSubscriber("presence", func(ctx context.Context) error {
-		return serverhttp.StartPresenceSubscriber(ctx, rdb, hub, logger)
+		return serverhttp.StartPresenceSubscriber(ctx, rdb, hub, userStore, logger)
 	})
 
 	// Admin username

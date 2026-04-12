@@ -5,13 +5,14 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"go.uber.org/zap"
 )
 
 type uploadKeyRequest struct {
 	PublicKey string `json:"publicKey"`
 }
 
-func UploadKeyHandler(userStore userStorer) http.HandlerFunc {
+func UploadKeyHandler(userStore userStorer, hub *Hub, log *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := CurrentUser(r)
 		if user == nil {
@@ -38,6 +39,20 @@ func UploadKeyHandler(userStore userStorer) http.HandlerFunc {
 			return
 		}
 
+		// Notify contacts who are currently connected so they re-fetch the key
+		// and re-derive the shared secret before their next message. Fire-and-forget:
+		// the DB lookup must not block or fail the response.
+		go func(userID int64, username string) {
+			followerIDs, err := userStore.GetContactFollowerIDs(userID)
+			if err != nil {
+				log.Error("[UploadKey] follower lookup failed", zap.Int64("user", userID), zap.Error(err))
+				return
+			}
+			for _, fid := range followerIDs {
+				hub.SendKeyChangedToUser(fid, username)
+			}
+		}(user.ID, user.Username)
+
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -49,6 +64,12 @@ type getKeyResponse struct {
 
 func GetKeyHandler(userStore userStorer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		currentUser := CurrentUser(r)
+		if currentUser == nil {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
 		vars := mux.Vars(r)
 		username := vars["username"]
 		if username == "" {
@@ -56,8 +77,25 @@ func GetKeyHandler(userStore userStorer) http.HandlerFunc {
 			return
 		}
 
-		key, err := userStore.GetPublicKeyByUsername(username)
-		if err != nil || key == "" {
+		target, err := userStore.GetByUsername(username)
+		if err != nil || target == nil {
+			http.Error(w, "key not found", http.StatusNotFound)
+			return
+		}
+
+		// Only contacts may fetch a public key. This prevents an authenticated
+		// stranger from harvesting keys for offline MITM prep or user enumeration.
+		ok, err := userStore.IsContact(currentUser.ID, target.ID)
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			http.Error(w, "key not found", http.StatusNotFound)
+			return
+		}
+
+		if target.PublicKey == "" {
 			http.Error(w, "key not found", http.StatusNotFound)
 			return
 		}
@@ -65,7 +103,7 @@ func GetKeyHandler(userStore userStorer) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(getKeyResponse{
 			Username:  username,
-			PublicKey: key,
+			PublicKey: target.PublicKey,
 		})
 	}
 }

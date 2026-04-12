@@ -15,13 +15,14 @@ function formatTime(iso: string) {
 }
 
 export function ChatPanel() {
-  const { user }                                              = useAuth()
-  const { activePeer, contacts, messages, typing, sendMessage, sendTyping } = useChat()
+  const { user }                                                          = useAuth()
+  const { activePeer, contacts, messages, hasMore, typing, sendMessage, sendTyping, loadMoreMessages } = useChat()
   const livePeer = contacts.find(c => c.id === activePeer?.id)
-  const [input, setInput]                                     = useState('')
-  const [peerHasKey, setPeerHasKey]                           = useState(false)
-  const messagesEndRef                                        = useRef<HTMLDivElement>(null)
-  const typingTimeout                                         = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [input, setInput]                                                 = useState('')
+  const [peerHasKey, setPeerHasKey]                                       = useState(false)
+  const [loadingMore, setLoadingMore]                                     = useState(false)
+  const messagesEndRef                                                    = useRef<HTMLDivElement>(null)
+  const typingTimeout                                                     = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const msgs = activePeer ? (messages[activePeer.username] ?? []) : []
 
@@ -34,6 +35,16 @@ export function ChatPanel() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [msgs])
+
+  const handleLoadMore = useCallback(async () => {
+    if (!activePeer || loadingMore) return
+    setLoadingMore(true)
+    try {
+      await loadMoreMessages(activePeer.username)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [activePeer, loadingMore, loadMoreMessages])
 
   const handleSend = useCallback(async () => {
     const body = input.trim()
@@ -148,6 +159,22 @@ export function ChatPanel() {
               </div>
             )
           })
+        )}
+        {activePeer && hasMore[activePeer.username] && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
+            <button
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              style={{
+                background: 'none', border: '1px solid var(--border-2)',
+                borderRadius: '999px', color: 'var(--text-dim)',
+                fontSize: '12px', padding: '5px 16px', cursor: loadingMore ? 'default' : 'pointer',
+                opacity: loadingMore ? 0.5 : 1,
+              }}
+            >
+              {loadingMore ? 'Loading…' : 'Load more'}
+            </button>
+          </div>
         )}
         <div ref={messagesEndRef} />
       </div>

@@ -30,18 +30,20 @@ func newTestRDB(t *testing.T) *redis.Client {
 // ─────────────────────────────────────────────────────────────
 
 type fakeUserStore struct {
-	users       map[string]*store.User
-	nextID      int64
-	inviteCodes map[string]bool // code → still available
-	publicKeys  map[int64]string
+	users            map[string]*store.User
+	nextID           int64
+	inviteCodes      map[string]bool // code → still available
+	publicKeys       map[int64]string
+	contactFollowers map[int64][]int64 // userID → IDs of users who have them as a contact
 }
 
 func newFakeUserStore() *fakeUserStore {
 	return &fakeUserStore{
-		users:       make(map[string]*store.User),
-		inviteCodes: make(map[string]bool),
-		publicKeys:  make(map[int64]string),
-		nextID:      1,
+		users:            make(map[string]*store.User),
+		inviteCodes:      make(map[string]bool),
+		publicKeys:       make(map[int64]string),
+		contactFollowers: make(map[int64][]int64),
+		nextID:           1,
 	}
 }
 
@@ -131,6 +133,10 @@ func (f *fakeUserStore) ListContacts(userID int64) ([]*store.Contact, error) {
 	return []*store.Contact{}, nil
 }
 
+func (f *fakeUserStore) GetContactFollowerIDs(userID int64) ([]int64, error) {
+	return f.contactFollowers[userID], nil
+}
+
 func (f *fakeUserStore) IsContact(userID, peerID int64) (bool, error) {
 	return false, nil
 }
@@ -182,7 +188,7 @@ func (f *fakeMessageStore) CreateOrGetExisting(
 	return m, true, nil
 }
 
-func (f *fakeMessageStore) ListConversationSince(userID, peerID, sinceID int64) ([]store.Message, error) {
+func (f *fakeMessageStore) ListConversationSince(userID, peerID, sinceID int64, limit int) ([]store.Message, bool, error) {
 	var out []store.Message
 	for _, m := range f.messages {
 		if m.ID > sinceID &&
@@ -191,7 +197,10 @@ func (f *fakeMessageStore) ListConversationSince(userID, peerID, sinceID int64) 
 			out = append(out, *m)
 		}
 	}
-	return out, nil
+	if len(out) > limit {
+		return out[:limit], true, nil
+	}
+	return out, false, nil
 }
 
 func (f *fakeMessageStore) GetByID(id int64) (*store.Message, error) {
@@ -752,7 +761,13 @@ func TestSendMessageRequest_Validate(t *testing.T) {
 		{"body too long", func(r *SendMessageRequest) { r.Body = string(make([]byte, maxMessageLen+1)) }, true},
 		{"clientMessageId too long", func(r *SendMessageRequest) { r.ClientMessageID = string(make([]byte, 129)) }, true},
 		{"encrypted missing iv", func(r *SendMessageRequest) { r.Encrypted = true }, true},
-		{"encrypted with iv", func(r *SendMessageRequest) { r.Encrypted = true; r.IV = "nonce" }, false},
+		// AAAAAAAAAAAAAAAA = base64(12 zero bytes) — correct AES-GCM nonce size
+		{"encrypted with valid 12-byte iv", func(r *SendMessageRequest) { r.Encrypted = true; r.IV = "AAAAAAAAAAAAAAAA" }, false},
+		// AAAAAAAAAAAA = base64(9 zero bytes) — too short
+		{"encrypted with iv too short", func(r *SendMessageRequest) { r.Encrypted = true; r.IV = "AAAAAAAAAAAA" }, true},
+		// AAAAAAAAAAAAAAAAAAAA = base64(15 zero bytes) — too long
+		{"encrypted with iv too long", func(r *SendMessageRequest) { r.Encrypted = true; r.IV = "AAAAAAAAAAAAAAAAAAAA" }, true},
+		{"encrypted with invalid base64 iv", func(r *SendMessageRequest) { r.Encrypted = true; r.IV = "not-valid-b64!!!" }, true},
 	}
 
 	for _, tc := range cases {

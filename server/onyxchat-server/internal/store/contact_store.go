@@ -221,6 +221,33 @@ func (s *UserStore) ListContacts(userID int64) ([]*Contact, error) {
 	return contacts, rows.Err()
 }
 
+// GetContactFollowerIDs returns the IDs of all non-deleted users who have userID
+// in their contact list. This is the fan-out target set for presence events:
+// when user X goes online or offline, only these users should be notified.
+func (s *UserStore) GetContactFollowerIDs(userID int64) ([]int64, error) {
+	rows, err := s.db.Query(`
+		SELECT c.user_id
+		FROM contacts c
+		JOIN users u ON u.id = c.user_id
+		WHERE c.contact_id = $1
+		  AND u.deleted_at IS NULL
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // GetUserByID fetches a user by ID. Returns ErrUserNotFound if deleted or missing.
 // Use this in AuthMiddleware to reject deleted users with valid JWTs.
 func (s *UserStore) GetUserByID(userID int64) (*User, error) {

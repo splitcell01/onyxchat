@@ -6,11 +6,16 @@ export async function fetchUsers(): Promise<User[]> {
   return Array.isArray(data) ? data : data.users
 }
 
-export async function fetchMessages(peerUsername: string, sinceId = 0): Promise<Message[]> {
-  const data = await api.get<{ messages: Message[] }>(
+export interface FetchMessagesResult {
+  messages: Message[]
+  hasMore: boolean
+}
+
+export async function fetchMessages(peerUsername: string, sinceId = 0): Promise<FetchMessagesResult> {
+  const data = await api.get<{ messages: Message[]; hasMore: boolean }>(
     `/api/v1/messages?peer=${peerUsername}&sinceId=${sinceId}`
   )
-  return data.messages ?? []
+  return { messages: data.messages ?? [], hasMore: data.hasMore ?? false }
 }
 
 export interface SendMessagePayload {

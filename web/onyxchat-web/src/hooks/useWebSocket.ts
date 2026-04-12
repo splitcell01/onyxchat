@@ -1,11 +1,12 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { api, getToken } from '../api/client'
-import type { WSChatMessage, WSTyping, WSPresence } from '../types'
+import type { WSChatMessage, WSTyping, WSPresence, WSKeyChanged } from '../types'
 
 type WSHandlers = {
   onMessage: (msg: WSChatMessage) => void
   onTyping: (msg: WSTyping) => void
   onPresence: (msg: WSPresence) => void
+  onKeyChanged: (msg: WSKeyChanged) => void
 }
 
 async function fetchWSTicket(): Promise<string> {
@@ -74,6 +75,9 @@ export function useWebSocket(handlers: WSHandlers, enabled = true) {
             break
           case 'presence':
             handlersRef.current.onPresence(msg)
+            break
+          case 'key_changed':
+            handlersRef.current.onKeyChanged(msg)
             break
         }
       } catch {

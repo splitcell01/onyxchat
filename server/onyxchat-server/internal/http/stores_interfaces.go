@@ -27,6 +27,7 @@ type userStorer interface {
 	UpdatePassword(userID int64, newHash string) error
 
 	ListContacts(userID int64) ([]*store.Contact, error)
+	GetContactFollowerIDs(userID int64) ([]int64, error)
 	IsContact(userID, peerID int64) (bool, error)
 	AddContact(userID int64, username string) error
 	RemoveContact(userID int64, username string) error
@@ -36,7 +37,7 @@ type userStorer interface {
 // messageStorer is the subset of *store.MessageStore used by HTTP handlers.
 type messageStorer interface {
 	CreateOrGetExisting(senderID, recipientID int64, body, iv string, encrypted bool, clientMessageID string) (*store.Message, bool, error)
-	ListConversationSince(userID, peerID, sinceID int64) ([]store.Message, error)
+	ListConversationSince(userID, peerID, sinceID int64, limit int) ([]store.Message, bool, error)
 	GetByID(id int64) (*store.Message, error)
 	GetUnreadForUser(userID, sinceID int64) ([]store.Message, error)
 }

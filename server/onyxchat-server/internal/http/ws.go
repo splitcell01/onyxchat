@@ -278,13 +278,24 @@ func WebSocketHandler(
 		hub.addClient(c)
 		ActiveWSConnections.Inc()
 
-		// Register with distributed presence and send snapshot of all online users.
+		// Register with distributed presence and send a snapshot of which contacts
+		// are currently online. We fetch contacts first so the snapshot is scoped
+		// to people the user actually cares about.
 		presenceCtx := r.Context()
 		if _, err := presenceStore.Connect(presenceCtx, c.userID, c.username); err != nil {
 			log.Warn("[WebSocket] presence connect error", zap.Int64("user", c.userID), zap.Error(err))
 		}
 
-		snapshot, err := presenceStore.GetSnapshot(presenceCtx)
+		contacts, err := userStore.ListContacts(c.userID)
+		if err != nil {
+			log.Warn("[WebSocket] contact list error", zap.Int64("user", c.userID), zap.Error(err))
+		}
+		contactIDs := make([]int64, len(contacts))
+		for i, ct := range contacts {
+			contactIDs[i] = ct.ID
+		}
+
+		snapshot, err := presenceStore.GetSnapshot(presenceCtx, contactIDs)
 		if err != nil {
 			log.Warn("[WebSocket] presence snapshot error", zap.Int64("user", c.userID), zap.Error(err))
 		}
@@ -304,7 +315,7 @@ func WebSocketHandler(
 		}
 
 		wsCtx, cancel := context.WithCancel(r.Context())
-		go c.writePump(wsCtx, cancel)
+		go c.writePump(wsCtx, cancel, presenceStore)
 		go c.readPump(wsCtx, cancel, userStore, hub, presenceStore)
 
 		log.Info("[WebSocket] pumps started", zap.Int64("user", c.userID))
@@ -313,7 +324,7 @@ func WebSocketHandler(
 	}
 }
 
-func (c *wsClient) writePump(ctx context.Context, cancel context.CancelFunc) {
+func (c *wsClient) writePump(ctx context.Context, cancel context.CancelFunc, presenceStore *PresenceStore) {
 	c.log.Info("[WebSocket] writePump start", zap.Int64("user", c.userID))
 	defer c.log.Info("[WebSocket] writePump exit", zap.Int64("user", c.userID))
 	defer func() {
@@ -363,6 +374,9 @@ func (c *wsClient) writePump(ctx context.Context, cancel context.CancelFunc) {
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				c.log.Error("[WebSocket] ping error", zap.Int64("user", c.userID), zap.Error(err))
 				return
+			}
+			if err := presenceStore.Refresh(context.Background(), c.userID); err != nil {
+				c.log.Warn("[WebSocket] presence refresh error", zap.Int64("user", c.userID), zap.Error(err))
 			}
 		}
 	}
@@ -483,6 +497,17 @@ func (h *Hub) SendTypingToUser(fromUsername string, toUserID int64, toUsername s
 		To:       toUsername,
 		IsTyping: isTyping,
 	})
+}
+
+// SendKeyChangedToUser notifies a single connected user that the named peer has
+// uploaded a new public key. The recipient should re-fetch the key and re-derive
+// the shared secret before sending their next message.
+func (h *Hub) SendKeyChangedToUser(userID int64, changedUsername string) {
+	type keyChangedEvent struct {
+		Type     string `json:"type"`
+		Username string `json:"username"`
+	}
+	h.sendToUser(userID, keyChangedEvent{Type: "key_changed", Username: changedUsername})
 }
 
 // Optional: clean close on server shutdown if you have a global cancel.
