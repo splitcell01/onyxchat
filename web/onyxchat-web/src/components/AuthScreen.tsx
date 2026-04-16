@@ -32,6 +32,7 @@ export function AuthScreen() {
       background: 'var(--bg)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '20px',
+      overflowY: 'auto',
     }}>
       <div style={{
         width: '100%', maxWidth: '360px',
