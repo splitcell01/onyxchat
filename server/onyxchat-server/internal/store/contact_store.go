@@ -57,6 +57,16 @@ func (s *UserStore) DeleteAccountGDPR(userID int64) (*GDPRDeletionRecord, error)
 
 	now := time.Now()
 
+	// Capture the original username before anonymization (needed to expire invite codes).
+	var originalUsername string
+	err = tx.QueryRow(`SELECT username FROM users WHERE id = $1 AND deleted_at IS NULL`, userID).Scan(&originalUsername)
+	if err == sql.ErrNoRows {
+		return nil, ErrAlreadyDeleted
+	}
+	if err != nil {
+		return nil, fmt.Errorf("lookup user: %w", err)
+	}
+
 	// 1. Anonymize user — fail fast if already deleted
 	res, err := tx.Exec(`
 		UPDATE users
@@ -96,7 +106,7 @@ func (s *UserStore) DeleteAccountGDPR(userID int64) (*GDPRDeletionRecord, error)
 		SET expires_at = NOW()
 		WHERE created_by = $1
 		  AND used_by IS NULL
-	`, userID)
+	`, originalUsername)
 	if err != nil {
 		return nil, fmt.Errorf("expire invite codes: %w", err)
 	}
