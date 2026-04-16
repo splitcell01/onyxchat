@@ -16,7 +16,7 @@ function formatTime(iso: string) {
 
 export function ChatPanel() {
   const { user }                                                          = useAuth()
-  const { activePeer, contacts, messages, hasMore, typing, sendMessage, sendTyping, loadMoreMessages } = useChat()
+  const { activePeer, contacts, messages, hasMore, typing, sendMessage, retryMessage, sendTyping, loadMoreMessages } = useChat()
   const livePeer = contacts.find(c => c.id === activePeer?.id)
   const [input, setInput]                                                 = useState('')
   const [peerHasKey, setPeerHasKey]                                       = useState(false)
@@ -130,24 +130,27 @@ export function ChatPanel() {
                   </div>
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: 'min(68%, 420px)', gap: '2px' }}>
-                  <div style={{
-                    padding: '8px 12px',
-                    borderRadius: isMe ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
-                    fontSize: '13.5px', lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'pre-wrap',
-                    background: msg.failed
-                      ? 'rgba(239,68,68,0.12)'
-                      : isMe ? 'linear-gradient(145deg, var(--blue), var(--blue-dim))' : 'var(--surface)',
-                    border: msg.failed
-                      ? '1px solid rgba(239,68,68,0.4)'
-                      : isMe ? 'none' : '1px solid var(--border-2)',
-                    color: msg.failed ? 'var(--red, #ef4444)' : isMe ? 'white' : 'var(--text)',
-                    opacity: msg.failed ? 0.85 : 1,
-                  }}>
+                  <div
+                    onClick={msg.failed ? () => retryMessage(msg.id, msg.body) : undefined}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: isMe ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
+                      fontSize: '13.5px', lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'pre-wrap',
+                      background: msg.failed
+                        ? 'rgba(239,68,68,0.12)'
+                        : isMe ? 'linear-gradient(145deg, var(--blue), var(--blue-dim))' : 'var(--surface)',
+                      border: msg.failed
+                        ? '1px solid rgba(239,68,68,0.4)'
+                        : isMe ? 'none' : '1px solid var(--border-2)',
+                      color: msg.failed ? 'var(--red, #ef4444)' : isMe ? 'white' : 'var(--text)',
+                      opacity: msg.failed ? 0.85 : 1,
+                      cursor: msg.failed ? 'pointer' : 'default',
+                    }}>
                     {msg.body}
                   </div>
                   <div style={{ fontSize: '10px', fontFamily: 'var(--mono)', color: 'var(--text-mute)', padding: '0 4px', display: 'flex', gap: '4px', alignItems: 'center' }}>
                     {msg.failed ? (
-                      <span style={{ color: 'var(--red, #ef4444)' }}>⚠ Failed to send</span>
+                      <span style={{ color: 'var(--red, #ef4444)', cursor: 'pointer' }} onClick={() => retryMessage(msg.id, msg.body)}>⚠ Tap to retry</span>
                     ) : (
                       <>
                         {formatTime(msg.createdAt)}

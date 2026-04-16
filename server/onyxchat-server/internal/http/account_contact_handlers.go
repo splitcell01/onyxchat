@@ -19,7 +19,7 @@ import (
 
 // DeleteAccountHandler performs a GDPR-compliant account deletion.
 // Requires the user to confirm their password to prevent accidental deletion.
-func DeleteAccountHandler(userStore userStorer, log *zap.Logger) http.HandlerFunc {
+func DeleteAccountHandler(userStore userStorer, hub *Hub, log *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cu := CurrentUser(r)
 		if cu == nil {
@@ -71,6 +71,9 @@ func DeleteAccountHandler(userStore userStorer, log *zap.Logger) http.HandlerFun
 			zap.Int("messages_purged", record.MessagesPurged),
 			zap.Int("invites_expired", record.InvitesExpired),
 		)
+
+		// Evict any active WebSocket sessions — the user is now deleted.
+		hub.DisconnectUser(cu.ID)
 
 		w.WriteHeader(http.StatusNoContent) // 204 — success, no body
 	}

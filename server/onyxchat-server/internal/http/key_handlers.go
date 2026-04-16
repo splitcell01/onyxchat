@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -33,6 +34,12 @@ func UploadKeyHandler(userStore userStorer, hub *Hub, log *zap.Logger) http.Hand
 		if len(req.PublicKey) < 80 || len(req.PublicKey) > 256 {
 			http.Error(w, "publicKey length invalid", http.StatusBadRequest)
 			return
+		}
+		if _, err := base64.StdEncoding.DecodeString(req.PublicKey); err != nil {
+			if _, err2 := base64.RawStdEncoding.DecodeString(req.PublicKey); err2 != nil {
+				http.Error(w, "publicKey must be base64-encoded", http.StatusBadRequest)
+				return
+			}
 		}
 
 		dbStart := time.Now()

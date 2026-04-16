@@ -238,9 +238,12 @@ func ListMessagesHandler(userStore userStorer, msgStore messageStorer, log *zap.
 		sinceStr := r.URL.Query().Get("sinceId")
 		var sinceID int64
 		if sinceStr != "" {
-			if v, err := strconv.ParseInt(sinceStr, 10, 64); err == nil {
-				sinceID = v
+			v, err := strconv.ParseInt(sinceStr, 10, 64)
+			if err != nil || v < 0 {
+				http.Error(w, "sinceId must be a non-negative integer", http.StatusBadRequest)
+				return
 			}
+			sinceID = v
 		}
 
 		limit := defaultPageSize

@@ -28,6 +28,7 @@ interface ChatState {
   unread:           Record<string, number>
   selectPeer:       (username: string) => void
   sendMessage:      (body: string) => Promise<void>
+  retryMessage:     (msgId: number, body: string) => Promise<void>
   sendTyping:       (isTyping: boolean) => void
   loadContacts:     () => Promise<void>
   loadMoreMessages: (username: string) => Promise<void>
@@ -267,6 +268,58 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, [activePeer, user, getSharedKey])
 
+  // ── Retry failed message ───────────────────────────────────────────────────
+
+  const retryMessage = useCallback(async (msgId: number, body: string) => {
+    if (!activePeer || !user) return
+
+    // Reset failed flag before retrying
+    setMessages(prev => ({
+      ...prev,
+      [activePeer.username]: (prev[activePeer.username] ?? []).map(m =>
+        m.id === msgId ? { ...m, failed: false } : m,
+      ),
+    }))
+
+    const clientMessageId = crypto.randomUUID()
+
+    try {
+      let sendBody  = body
+      let iv: string | undefined
+      let encrypted = false
+
+      const sharedKey = await getSharedKey(activePeer.username)
+      if (sharedKey) {
+        const payload = await encryptMessage(sharedKey, body)
+        sendBody  = payload.body
+        iv        = payload.iv
+        encrypted = true
+      }
+
+      const saved = await apiSendMessage({
+        recipientUsername: activePeer.username,
+        body: sendBody,
+        iv,
+        encrypted,
+        clientMessageId,
+      })
+
+      setMessages(prev => {
+        const arr = [...(prev[activePeer.username] ?? [])]
+        const idx = arr.findIndex(m => m.id === msgId)
+        if (idx >= 0) arr[idx] = { ...saved, body }
+        return { ...prev, [activePeer.username]: arr }
+      })
+    } catch {
+      setMessages(prev => ({
+        ...prev,
+        [activePeer.username]: (prev[activePeer.username] ?? []).map(m =>
+          m.id === msgId ? { ...m, failed: true } : m,
+        ),
+      }))
+    }
+  }, [activePeer, user, getSharedKey])
+
   // ── Typing ─────────────────────────────────────────────────────────────────
 
   const sendTyping = useCallback((isTyping: boolean) => {
@@ -277,7 +330,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   return (
     <ChatContext.Provider value={{
       contacts, messages, hasMore, activePeer, typing, unread,
-      selectPeer, sendMessage, sendTyping, loadContacts, loadMoreMessages,
+      selectPeer, sendMessage, retryMessage, sendTyping, loadContacts, loadMoreMessages,
     }}>
       {children}
     </ChatContext.Provider>

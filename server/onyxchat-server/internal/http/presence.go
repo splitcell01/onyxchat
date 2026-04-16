@@ -24,10 +24,11 @@ const (
 
 type PresenceStore struct {
 	rdb *redis.Client
+	log *zap.Logger
 }
 
-func NewPresenceStore(rdb *redis.Client) *PresenceStore {
-	return &PresenceStore{rdb: rdb}
+func NewPresenceStore(rdb *redis.Client, log *zap.Logger) *PresenceStore {
+	return &PresenceStore{rdb: rdb, log: log}
 }
 
 // Connect increments the global connection counter for userID. Returns true if this
@@ -39,9 +40,13 @@ func (p *PresenceStore) Connect(ctx context.Context, userID int64, username stri
 	if err != nil {
 		return false, err
 	}
-	p.rdb.Expire(ctx, key, presenceConnsTTL)
+	if err := p.rdb.Expire(ctx, key, presenceConnsTTL).Err(); err != nil {
+		p.log.Warn("[Presence] failed to set TTL on connect", zap.Int64("user_id", userID), zap.Error(err))
+	}
 	if n == 1 {
-		p.rdb.HSet(ctx, presenceNamesKey, strconv.FormatInt(userID, 10), username)
+		if err := p.rdb.HSet(ctx, presenceNamesKey, strconv.FormatInt(userID, 10), username).Err(); err != nil {
+			p.log.Warn("[Presence] failed to register online user", zap.Int64("user_id", userID), zap.Error(err))
+		}
 		p.publish(ctx, PresenceEvent{Type: "presence", UserID: userID, Username: username, Status: "online"})
 		return true, nil
 	}
@@ -58,8 +63,12 @@ func (p *PresenceStore) Disconnect(ctx context.Context, userID int64, username s
 		return false, err
 	}
 	if n <= 0 {
-		p.rdb.Del(ctx, key)
-		p.rdb.HDel(ctx, presenceNamesKey, strconv.FormatInt(userID, 10))
+		if err := p.rdb.Del(ctx, key).Err(); err != nil {
+			p.log.Warn("[Presence] failed to delete conn counter", zap.Int64("user_id", userID), zap.Error(err))
+		}
+		if err := p.rdb.HDel(ctx, presenceNamesKey, strconv.FormatInt(userID, 10)).Err(); err != nil {
+			p.log.Warn("[Presence] failed to remove user from online set", zap.Int64("user_id", userID), zap.Error(err))
+		}
 		p.publish(ctx, PresenceEvent{Type: "presence", UserID: userID, Username: username, Status: "offline"})
 		return true, nil
 	}

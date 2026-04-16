@@ -40,7 +40,7 @@ func NewRouter(
 	userLimiter := NewKeyedLimiter(rate.Limit(10), 20, 10*time.Minute)
 
 	upgrader := NewUpgrader(allowedOrigins, env)
-	presenceStore := NewPresenceStore(rdb)
+	presenceStore := NewPresenceStore(rdb, log)
 
 	// ---- basic routes ----
 	r.Handle("/metrics", promhttp.Handler()).Methods(http.MethodGet)
@@ -100,7 +100,7 @@ func NewRouter(
 
 	// GDPR account deletion
 	protected.Handle("/account",
-		MaxBodyBytes(1<<20)(http.HandlerFunc(DeleteAccountHandler(userStore, log))),
+		MaxBodyBytes(1<<20)(http.HandlerFunc(DeleteAccountHandler(userStore, hub, log))),
 	).Methods(http.MethodDelete, http.MethodOptions)
 
 	// ---- admin ----

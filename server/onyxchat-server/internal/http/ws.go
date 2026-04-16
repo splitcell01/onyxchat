@@ -98,13 +98,27 @@ func (c *wsClient) closeWith(code int, reason string) {
 type Hub struct {
 	mu sync.RWMutex
 
-	clientsByUser map[int64]map[*wsClient]struct{}
+	clientsByUser  map[int64]map[*wsClient]struct{}
+	limitersByUser map[int64]*rate.Limiter // shared per user, not per connection
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		clientsByUser: make(map[int64]map[*wsClient]struct{}),
+		clientsByUser:  make(map[int64]map[*wsClient]struct{}),
+		limitersByUser: make(map[int64]*rate.Limiter),
 	}
+}
+
+// limiterFor returns the shared rate limiter for a user, creating one if needed.
+func (h *Hub) limiterFor(userID int64) *rate.Limiter {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if l, ok := h.limitersByUser[userID]; ok {
+		return l
+	}
+	l := rate.NewLimiter(rate.Limit(wsMsgsPerSecond), wsBurst)
+	h.limitersByUser[userID] = l
+	return l
 }
 
 func (h *Hub) addClient(c *wsClient) {
@@ -130,6 +144,7 @@ func (h *Hub) removeClient(c *wsClient) {
 	delete(set, c)
 	if len(set) == 0 {
 		delete(h.clientsByUser, c.userID)
+		delete(h.limitersByUser, c.userID)
 	}
 }
 
@@ -186,6 +201,21 @@ func (h *Hub) CloseAll(reason string) {
 
 	for _, c := range targets {
 		c.closeWith(websocket.CloseGoingAway, reason)
+	}
+}
+
+// DisconnectUser closes all WebSocket connections for the given user ID.
+// Called after account deletion so the session doesn't linger.
+func (h *Hub) DisconnectUser(userID int64) {
+	h.mu.RLock()
+	var targets []*wsClient
+	for c := range h.clientsByUser[userID] {
+		targets = append(targets, c)
+	}
+	h.mu.RUnlock()
+
+	for _, c := range targets {
+		c.closeWith(websocket.ClosePolicyViolation, "account deleted")
 	}
 }
 
@@ -386,7 +416,7 @@ func (c *wsClient) readPump(ctx context.Context, cancel context.CancelFunc, user
 	c.log.Info("[WebSocket] readPump start", zap.Int64("user", c.userID))
 	defer c.log.Info("[WebSocket] readPump exit", zap.Int64("user", c.userID))
 
-	limiter := rate.NewLimiter(rate.Limit(wsMsgsPerSecond), wsBurst)
+	limiter := hub.limiterFor(c.userID)
 
 	defer func() {
 		ActiveWSConnections.Dec()
