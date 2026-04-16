@@ -33,6 +33,7 @@ func NewPresenceStore(rdb *redis.Client) *PresenceStore {
 // Connect increments the global connection counter for userID. Returns true if this
 // is the first connection across all instances (user just came online).
 func (p *PresenceStore) Connect(ctx context.Context, userID int64, username string) (bool, error) {
+	defer ObserveRedisOp("presence_connect", time.Now())
 	key := presenceConnsKey + strconv.FormatInt(userID, 10)
 	n, err := p.rdb.Incr(ctx, key).Result()
 	if err != nil {
@@ -50,6 +51,7 @@ func (p *PresenceStore) Connect(ctx context.Context, userID int64, username stri
 // Disconnect decrements the global connection counter. Returns true if no connections
 // remain across all instances (user just went offline).
 func (p *PresenceStore) Disconnect(ctx context.Context, userID int64, username string) (bool, error) {
+	defer ObserveRedisOp("presence_disconnect", time.Now())
 	key := presenceConnsKey + strconv.FormatInt(userID, 10)
 	n, err := p.rdb.Decr(ctx, key).Result()
 	if err != nil {
@@ -68,6 +70,7 @@ func (p *PresenceStore) Disconnect(ctx context.Context, userID int64, username s
 // WebSocket ping so the key stays alive for connected clients and expires
 // naturally after presenceConnsTTL if the server crashes without calling Disconnect.
 func (p *PresenceStore) Refresh(ctx context.Context, userID int64) error {
+	defer ObserveRedisOp("presence_refresh", time.Now())
 	key := presenceConnsKey + strconv.FormatInt(userID, 10)
 	return p.rdb.Expire(ctx, key, presenceConnsTTL).Err()
 }
@@ -79,6 +82,7 @@ func (p *PresenceStore) GetSnapshot(ctx context.Context, contactIDs []int64) ([]
 	if len(contactIDs) == 0 {
 		return nil, nil
 	}
+	defer ObserveRedisOp("presence_snapshot", time.Now())
 
 	allowed := make(map[int64]struct{}, len(contactIDs))
 	for _, id := range contactIDs {

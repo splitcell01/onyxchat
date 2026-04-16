@@ -157,6 +157,16 @@ var (
 		[]string{"limiter"},
 	)
 
+	// Redis
+	RedisOpDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "redis_op_duration_seconds",
+			Help:    "Latency of Redis operations partitioned by operation name.",
+			Buckets: []float64{.0001, .0005, .001, .0025, .005, .01, .025, .05, .1},
+		},
+		[]string{"operation"},
+	)
+
 	initHTTPMetricsOnce sync.Once
 )
 
@@ -174,6 +184,7 @@ func InitHTTPMetrics() {
 			MessagePublishFailures,
 			DBQueryDuration,
 			HTTPRateLimitRejections,
+			RedisOpDuration,
 		)
 	})
 }
@@ -183,6 +194,13 @@ func InitHTTPMetrics() {
 //	defer ObserveDBQuery("message_create", time.Now())
 func ObserveDBQuery(operation string, start time.Time) {
 	DBQueryDuration.WithLabelValues(operation).Observe(time.Since(start).Seconds())
+}
+
+// ObserveRedisOp times a Redis operation. Use as a deferred call:
+//
+//	defer ObserveRedisOp("token_get", time.Now())
+func ObserveRedisOp(operation string, start time.Time) {
+	RedisOpDuration.WithLabelValues(operation).Observe(time.Since(start).Seconds())
 }
 
 func routeTemplate(r *http.Request) string {

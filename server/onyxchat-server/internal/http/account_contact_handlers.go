@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cole/onyxchat-server/internal/store"
 	"github.com/gorilla/mux"
@@ -36,7 +37,9 @@ func DeleteAccountHandler(userStore userStorer, log *zap.Logger) http.HandlerFun
 		}
 
 		// Verify password before deleting
+		dbStart := time.Now()
 		user, err := userStore.GetUserByUsername(cu.Username)
+		ObserveDBQuery("user_get_by_username", dbStart)
 		if err != nil {
 			http.Error(w, "user not found", http.StatusNotFound)
 			return
@@ -49,7 +52,9 @@ func DeleteAccountHandler(userStore userStorer, log *zap.Logger) http.HandlerFun
 			return
 		}
 
+		dbStart = time.Now()
 		record, err := userStore.DeleteAccountGDPR(cu.ID)
+		ObserveDBQuery("account_delete", dbStart)
 		if err != nil {
 			switch {
 			case errors.Is(err, store.ErrAlreadyDeleted):
@@ -83,7 +88,9 @@ func ListContactsHandler(userStore userStorer, log *zap.Logger) http.HandlerFunc
 			return
 		}
 
+		dbStart := time.Now()
 		contacts, err := userStore.ListContacts(cu.ID)
+		ObserveDBQuery("contact_list", dbStart)
 		if err != nil {
 			log.Error("[ListContacts] error", zap.Int64("user_id", cu.ID), zap.Error(err))
 			writeJSONError(w, http.StatusInternalServerError, "failed to list contacts")
@@ -140,7 +147,10 @@ func AddContactHandler(userStore userStorer, log *zap.Logger) http.HandlerFunc {
 			return
 		}
 
-		if err := userStore.AddContact(cu.ID, req.Username); err != nil {
+		dbStart := time.Now()
+		err := userStore.AddContact(cu.ID, req.Username)
+		ObserveDBQuery("contact_add", dbStart)
+		if err != nil {
 			switch {
 			case errors.Is(err, store.ErrUserNotFound):
 				http.Error(w, "user not found", http.StatusNotFound)
@@ -175,7 +185,10 @@ func RemoveContactHandler(userStore userStorer, log *zap.Logger) http.HandlerFun
 			return
 		}
 
-		if err := userStore.RemoveContact(cu.ID, targetUsername); err != nil {
+		dbStart := time.Now()
+		err := userStore.RemoveContact(cu.ID, targetUsername)
+		ObserveDBQuery("contact_remove", dbStart)
+		if err != nil {
 			if errors.Is(err, store.ErrContactNotFound) {
 				http.Error(w, "contact not found", http.StatusNotFound)
 				return

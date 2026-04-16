@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
@@ -34,7 +35,10 @@ func UploadKeyHandler(userStore userStorer, hub *Hub, log *zap.Logger) http.Hand
 			return
 		}
 
-		if err := userStore.SetPublicKey(user.ID, req.PublicKey); err != nil {
+		dbStart := time.Now()
+		err := userStore.SetPublicKey(user.ID, req.PublicKey)
+		ObserveDBQuery("key_set", dbStart)
+		if err != nil {
 			http.Error(w, "failed to save key", http.StatusInternalServerError)
 			return
 		}
@@ -77,7 +81,9 @@ func GetKeyHandler(userStore userStorer) http.HandlerFunc {
 			return
 		}
 
+		dbStart := time.Now()
 		target, err := userStore.GetByUsername(username)
+		ObserveDBQuery("user_get_by_username", dbStart)
 		if err != nil || target == nil {
 			http.Error(w, "key not found", http.StatusNotFound)
 			return
@@ -85,7 +91,9 @@ func GetKeyHandler(userStore userStorer) http.HandlerFunc {
 
 		// Only contacts may fetch a public key. This prevents an authenticated
 		// stranger from harvesting keys for offline MITM prep or user enumeration.
+		dbStart = time.Now()
 		ok, err := userStore.IsContact(currentUser.ID, target.ID)
+		ObserveDBQuery("contact_is_contact", dbStart)
 		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return

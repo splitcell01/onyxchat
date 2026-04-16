@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cole/onyxchat-server/internal/store"
 	"github.com/redis/go-redis/v9"
@@ -66,7 +67,9 @@ func RegisterHandler(userStore userStorer, jwtMgr *JWTManager, rdb *redis.Client
 
 		// Consume invite code and create user atomically — if user creation
 		// fails (e.g. duplicate username) the invite code is not burned.
+		dbStart := time.Now()
 		user, err := userStore.RegisterWithInvite(req.InviteCode, req.Username, string(hashedBytes))
+		ObserveDBQuery("user_register", dbStart)
 		if err != nil {
 			log.Warn("[Register] could not create user", zap.String("username", req.Username), zap.Error(err))
 			if strings.Contains(err.Error(), "invalid or already used invite code") {
@@ -141,7 +144,9 @@ func LoginHandler(userStore userStorer, jwtMgr *JWTManager, idLimiter *KeyedLimi
 			return
 		}
 
+		dbStart := time.Now()
 		user, err := userStore.GetUserByUsername(req.Username)
+		ObserveDBQuery("user_get_by_username", dbStart)
 		if err != nil {
 			if err == store.ErrUserNotFound {
 				writeJSONError(w, http.StatusUnauthorized, "invalid credentials")
@@ -216,7 +221,9 @@ func RefreshHandler(userStore userStorer, jwtMgr *JWTManager, rdb *redis.Client,
 			return
 		}
 
+		dbStart := time.Now()
 		user, err := userStore.GetUserByID(userID)
+		ObserveDBQuery("user_get_by_id", dbStart)
 		if err != nil {
 			writeJSONError(w, http.StatusUnauthorized, "account not found")
 			return
@@ -281,10 +288,13 @@ func ListUsersHandler(userStore userStorer, log *zap.Logger) http.HandlerFunc {
 		var users []*store.User
 		var err error
 
+		dbStart := time.Now()
 		if q := strings.TrimSpace(r.URL.Query().Get("search")); q != "" {
 			users, err = userStore.SearchUsers(q)
+			ObserveDBQuery("user_search", dbStart)
 		} else {
 			users, err = userStore.ListUsers()
+			ObserveDBQuery("user_list", dbStart)
 		}
 		if err != nil {
 			log.Error("[ListUsers] failed to list users", zap.Error(err))

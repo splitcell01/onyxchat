@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -37,7 +38,9 @@ func ChangePasswordHandler(userStore userStorer) http.HandlerFunc {
 		}
 
 		// Fetch the full user record (with password hash) from DB
+		dbStart := time.Now()
 		existing, err := userStore.GetUserByUsername(user.Username)
+		ObserveDBQuery("user_get_by_username", dbStart)
 		if err != nil {
 			http.Error(w, "user not found", http.StatusNotFound)
 			return
@@ -56,7 +59,10 @@ func ChangePasswordHandler(userStore userStorer) http.HandlerFunc {
 			return
 		}
 
-		if err := userStore.UpdatePassword(user.ID, string(newHash)); err != nil {
+		dbStart = time.Now()
+		err = userStore.UpdatePassword(user.ID, string(newHash))
+		ObserveDBQuery("password_update", dbStart)
+		if err != nil {
 			http.Error(w, "failed to update password", http.StatusInternalServerError)
 			return
 		}
