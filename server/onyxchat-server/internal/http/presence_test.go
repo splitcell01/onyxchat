@@ -17,7 +17,7 @@ func newTestPresenceStore(t *testing.T) (*PresenceStore, *miniredis.Miniredis) {
 	t.Helper()
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	return NewPresenceStore(rdb), mr
+	return NewPresenceStore(rdb, zap.NewNop()), mr
 }
 
 // ─── Presence TTL behaviour ──────────────────────────────────────────────────

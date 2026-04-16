@@ -1,0 +1,16 @@
+apiVersion: 1
+datasources:
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    editable: false
+    jsonData:
+      derivedFields:
+        # Clicking a trace_id value in a log line jumps to the matching trace in Tempo.
+        - datasourceUid: tempo
+          matcherRegex: '"trace_id":"(\w+)"'
+          name: TraceID
+          url: "${__value.raw}"

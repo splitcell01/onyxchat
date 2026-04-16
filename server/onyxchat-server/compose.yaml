@@ -77,6 +77,26 @@ services:
       - server
     restart: unless-stopped
 
+  loki:
+    image: grafana/loki:2.9.4
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./monitoring/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:2.9.4
+    command: ["-config.file=/etc/promtail/promtail.yaml"]
+    volumes:
+      - ./monitoring/promtail.yaml:/etc/promtail/promtail.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+    restart: unless-stopped
+
   grafana:
     image: grafana/grafana:10.4.2
     environment:
@@ -91,6 +111,7 @@ services:
       - "3000:3000"
     depends_on:
       - prometheus
+      - loki
     restart: unless-stopped
 
 volumes:
@@ -98,3 +119,4 @@ volumes:
   prometheus_data:
   grafana_data:
   tempo_data:
+  loki_data:
