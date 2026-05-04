@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
@@ -43,6 +44,12 @@ type MessageCreatedEvent struct {
 	ClientMessageID string `json:"clientMessageId"`
 }
 
+type MessageDeletedEvent struct {
+	MessageID   int64 `json:"messageId"`
+	SenderID    int64 `json:"senderId"`
+	RecipientID int64 `json:"recipientId"`
+}
+
 type RedisPublisher struct {
 	Client *redis.Client
 }
@@ -53,6 +60,14 @@ func (p *RedisPublisher) PublishMessageCreated(ctx context.Context, event Messag
 		return err
 	}
 	return p.Client.Publish(ctx, "message.created", payload).Err()
+}
+
+func (p *RedisPublisher) PublishMessageDeleted(ctx context.Context, event MessageDeletedEvent) error {
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	return p.Client.Publish(ctx, "message.deleted", payload).Err()
 }
 
 func (r *SendMessageRequest) Validate() string {
@@ -91,7 +106,7 @@ func StartMessageSubscriber(
 	hub *Hub,
 	log *zap.Logger,
 ) error {
-	sub := rdb.Subscribe(ctx, "message.created")
+	sub := rdb.Subscribe(ctx, "message.created", "message.deleted")
 	defer sub.Close()
 	ch := sub.Channel()
 
@@ -103,26 +118,37 @@ func StartMessageSubscriber(
 			if !ok {
 				return fmt.Errorf("subscription channel closed")
 			}
-			var ev MessageCreatedEvent
-			if err := json.Unmarshal([]byte(msg.Payload), &ev); err != nil {
-				log.Error("[RedisSub] invalid payload", zap.Error(err))
-				continue
-			}
+			switch msg.Channel {
+			case "message.created":
+				var ev MessageCreatedEvent
+				if err := json.Unmarshal([]byte(msg.Payload), &ev); err != nil {
+					log.Error("[RedisSub] invalid message.created payload", zap.Error(err))
+					continue
+				}
+				fullMsg, err := msgStore.GetByID(ev.MessageID)
+				if err != nil {
+					log.Error("[RedisSub] failed to load message", zap.Int64("message_id", ev.MessageID), zap.Error(err))
+					continue
+				}
+				hub.SendMessageToUser(fullMsg.SenderID, fullMsg)
+				hub.SendMessageToUser(fullMsg.RecipientID, fullMsg)
 
-			fullMsg, err := msgStore.GetByID(ev.MessageID)
-			if err != nil {
-				log.Error("[RedisSub] failed to load message", zap.Int64("message_id", ev.MessageID), zap.Error(err))
-				continue
+			case "message.deleted":
+				var ev MessageDeletedEvent
+				if err := json.Unmarshal([]byte(msg.Payload), &ev); err != nil {
+					log.Error("[RedisSub] invalid message.deleted payload", zap.Error(err))
+					continue
+				}
+				hub.SendMessageDeletedToUser(ev.SenderID, ev.MessageID)
+				hub.SendMessageDeletedToUser(ev.RecipientID, ev.MessageID)
 			}
-
-			hub.SendMessageToUser(fullMsg.SenderID, fullMsg)
-			hub.SendMessageToUser(fullMsg.RecipientID, fullMsg)
 		}
 	}
 }
 
 type EventPublisher interface {
 	PublishMessageCreated(ctx context.Context, event MessageCreatedEvent) error
+	PublishMessageDeleted(ctx context.Context, event MessageDeletedEvent) error
 }
 
 func SendMessageHandler(
@@ -275,5 +301,64 @@ func ListMessagesHandler(userStore userStorer, msgStore messageStorer, log *zap.
 		if err := json.NewEncoder(w).Encode(ListMessagesResponse{Messages: msgs, HasMore: hasMore}); err != nil {
 			log.Error("[ListMessages] failed to write response", zap.Error(err))
 		}
+	}
+}
+
+// ─────────────────────────────────────────────────────────────
+// DELETE /api/v1/messages/{id}
+// Only the sender may delete their own message.
+// Broadcasts a message_deleted WS event to both sender and recipient.
+// ─────────────────────────────────────────────────────────────
+
+func DeleteMessageHandler(
+	msgStore messageStorer,
+	publisher EventPublisher,
+	log *zap.Logger,
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		currentUser := CurrentUser(r)
+		if currentUser == nil {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		vars := mux.Vars(r)
+		msgID, err := strconv.ParseInt(vars["id"], 10, 64)
+		if err != nil || msgID <= 0 {
+			http.Error(w, "invalid message id", http.StatusBadRequest)
+			return
+		}
+
+		msg, err := msgStore.GetByID(msgID)
+		if err != nil {
+			http.Error(w, "message not found", http.StatusNotFound)
+			return
+		}
+		if msg.SenderID != currentUser.ID {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+
+		if err := msgStore.DeleteMessage(msgID, currentUser.ID); err != nil {
+			log.Error("[DeleteMessage] failed to delete", zap.Error(err))
+			writeJSONError(w, http.StatusInternalServerError, "failed to delete message")
+			return
+		}
+
+		event := MessageDeletedEvent{
+			MessageID:   msgID,
+			SenderID:    currentUser.ID,
+			RecipientID: msg.RecipientID,
+		}
+
+		go func(ev MessageDeletedEvent) {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if err := publisher.PublishMessageDeleted(ctx, ev); err != nil {
+				log.Error("[DeleteMessage] failed to publish event", zap.Error(err))
+			}
+		}(event)
+
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

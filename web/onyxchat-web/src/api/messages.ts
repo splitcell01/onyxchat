@@ -30,3 +30,7 @@ export interface SendMessagePayload {
 export async function sendMessage(payload: SendMessagePayload): Promise<Message> {
   return api.post<Message>('/api/v1/messages', payload)
 }
+
+export async function deleteMessage(id: number): Promise<void> {
+  await api.delete(`/api/v1/messages/${id}`)
+}

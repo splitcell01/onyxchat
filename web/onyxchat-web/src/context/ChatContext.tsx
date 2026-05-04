@@ -4,7 +4,7 @@ import {
 } from 'react'
 
 import { useWebSocket }                              from '../hooks/useWebSocket'
-import { fetchMessages, sendMessage as apiSendMessage } from '../api/messages'
+import { fetchMessages, sendMessage as apiSendMessage, deleteMessage as apiDeleteMessage } from '../api/messages'
 import { fetchPublicKey }                            from '../api/keys'
 import { useAuth }                                   from './AuthContext'
 import {
@@ -14,7 +14,7 @@ import {
   decryptMessage,
 } from '../lib/crypto'
 
-import type { Contact, Message, WSChatMessage, WSTyping, WSPresence, WSKeyChanged } from '../types'
+import type { Contact, Message, WSChatMessage, WSTyping, WSPresence, WSKeyChanged, WSMessageDeleted } from '../types'
 import { fetchContacts } from '../api/contacts'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -29,6 +29,7 @@ interface ChatState {
   selectPeer:       (username: string) => void
   sendMessage:      (body: string) => Promise<void>
   retryMessage:     (msgId: number, body: string) => Promise<void>
+  deleteMessage:    (msgId: number) => Promise<void>
   sendTyping:       (isTyping: boolean) => void
   loadContacts:     () => Promise<void>
   loadMoreMessages: (username: string) => Promise<void>
@@ -155,7 +156,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     sharedKeyCache.current.delete(msg.username)
   }, [])
 
-  const { send } = useWebSocket({ onMessage, onTyping, onPresence, onKeyChanged }, !!user)
+  const onMessageDeleted = useCallback((msg: WSMessageDeleted) => {
+    setMessages(prev => {
+      const updated: Record<string, Message[]> = {}
+      for (const [peer, msgs] of Object.entries(prev)) {
+        const filtered = msgs.filter(m => m.id !== msg.messageId)
+        updated[peer] = filtered
+      }
+      return updated
+    })
+  }, [])
+
+  const { send } = useWebSocket({ onMessage, onTyping, onPresence, onKeyChanged, onMessageDeleted }, !!user)
 
   // ── Contacts ───────────────────────────────────────────────────────────────
 
@@ -320,6 +332,28 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, [activePeer, user, getSharedKey])
 
+  // ── Delete message (optimistic remove, then server confirm) ──────────────
+
+  const deleteMessage = useCallback(async (msgId: number) => {
+    if (!activePeer) return
+
+    // Optimistic remove
+    setMessages(prev => ({
+      ...prev,
+      [activePeer.username]: (prev[activePeer.username] ?? []).filter(m => m.id !== msgId),
+    }))
+
+    try {
+      await apiDeleteMessage(msgId)
+      // Server will broadcast message_deleted to recipient via WS
+    } catch {
+      // Re-fetch from server to restore if delete failed
+      const { messages: raw } = await fetchMessages(activePeer.username, 0)
+      const decrypted = await Promise.all(raw.map(m => tryDecrypt(m, activePeer.username)))
+      setMessages(prev => ({ ...prev, [activePeer.username]: decrypted }))
+    }
+  }, [activePeer, tryDecrypt])
+
   // ── Typing ─────────────────────────────────────────────────────────────────
 
   const sendTyping = useCallback((isTyping: boolean) => {
@@ -330,7 +364,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   return (
     <ChatContext.Provider value={{
       contacts, messages, hasMore, activePeer, typing, unread,
-      selectPeer, sendMessage, retryMessage, sendTyping, loadContacts, loadMoreMessages,
+      selectPeer, sendMessage, retryMessage, deleteMessage, sendTyping, loadContacts, loadMoreMessages,
     }}>
       {children}
     </ChatContext.Provider>

@@ -40,6 +40,7 @@ type messageStorer interface {
 	ListConversationSince(userID, peerID, sinceID int64, limit int) ([]store.Message, bool, error)
 	GetByID(id int64) (*store.Message, error)
 	GetUnreadForUser(userID, sinceID int64) ([]store.Message, error)
+	DeleteMessage(id, senderID int64) error
 }
 
 // Compile-time checks: the real store types must satisfy the interfaces.

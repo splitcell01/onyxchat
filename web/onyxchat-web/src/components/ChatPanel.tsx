@@ -16,7 +16,8 @@ function formatTime(iso: string) {
 
 export function ChatPanel() {
   const { user }                                                          = useAuth()
-  const { activePeer, contacts, messages, hasMore, typing, sendMessage, retryMessage, sendTyping, loadMoreMessages } = useChat()
+  const { activePeer, contacts, messages, hasMore, typing, sendMessage, retryMessage, deleteMessage, sendTyping, loadMoreMessages } = useChat()
+  const [hoveredMsg, setHoveredMsg]                                       = useState<number | null>(null)
   const livePeer = contacts.find(c => c.id === activePeer?.id)
   const [input, setInput]                                                 = useState('')
   const [peerHasKey, setPeerHasKey]                                       = useState(false)
@@ -118,7 +119,12 @@ export function ChatPanel() {
           msgs.map((msg) => {
             const isMe = msg.senderId === user?.id
             return (
-              <div key={msg.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', gap: '8px', alignItems: 'flex-end' }}>
+              <div
+                key={msg.id}
+                onMouseEnter={() => setHoveredMsg(msg.id)}
+                onMouseLeave={() => setHoveredMsg(null)}
+                style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', gap: '8px', alignItems: 'flex-end', position: 'relative' }}
+              >
                 {!isMe && (
                   <div style={{
                     width: '26px', height: '26px', borderRadius: '50%',
@@ -159,6 +165,20 @@ export function ChatPanel() {
                     )}
                   </div>
                 </div>
+                {isMe && !msg.failed && hoveredMsg === msg.id && msg.id > 0 && (
+                  <button
+                    onClick={() => deleteMessage(msg.id)}
+                    title="Delete message"
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'var(--text-mute)', padding: '2px 4px',
+                      fontSize: '14px', lineHeight: 1, borderRadius: '4px',
+                      flexShrink: 0, alignSelf: 'center',
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             )
           })

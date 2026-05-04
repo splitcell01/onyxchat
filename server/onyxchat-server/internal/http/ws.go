@@ -529,6 +529,14 @@ func (h *Hub) SendTypingToUser(fromUsername string, toUserID int64, toUsername s
 	})
 }
 
+func (h *Hub) SendMessageDeletedToUser(userID int64, messageID int64) {
+	type payload struct {
+		Type      string `json:"type"`
+		MessageID int64  `json:"messageId"`
+	}
+	h.sendToUser(userID, payload{Type: "message_deleted", MessageID: messageID})
+}
+
 // SendKeyChangedToUser notifies a single connected user that the named peer has
 // uploaded a new public key. The recipient should re-fetch the key and re-derive
 // the shared secret before sending their next message.

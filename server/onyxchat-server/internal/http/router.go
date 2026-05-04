@@ -91,6 +91,7 @@ func NewRouter(
 	).Methods(http.MethodPost, http.MethodOptions)
 
 	protected.HandleFunc("/messages", ListMessagesHandler(userStore, msgStore, log)).Methods(http.MethodGet, http.MethodOptions)
+	protected.HandleFunc("/messages/{id}", DeleteMessageHandler(msgStore, publisher, log)).Methods(http.MethodDelete, http.MethodOptions)
 
 	protected.HandleFunc("/contacts", ListContactsHandler(userStore, log)).Methods(http.MethodGet, http.MethodOptions)
 	protected.Handle("/contacts",

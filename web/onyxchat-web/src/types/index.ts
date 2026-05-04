@@ -33,7 +33,7 @@ export interface AuthResponse {
 
 // WebSocket message types
 export interface WSMessage {
-  type: 'message' | 'typing' | 'presence' | 'key_changed'
+  type: 'message' | 'typing' | 'presence' | 'key_changed' | 'message_deleted'
 }
 
 export interface WSChatMessage extends WSMessage {
@@ -58,6 +58,11 @@ export interface WSPresence extends WSMessage {
 export interface WSKeyChanged extends WSMessage {
   type: 'key_changed'
   username: string
+}
+
+export interface WSMessageDeleted extends WSMessage {
+  type: 'message_deleted'
+  messageId: number
 }
 
 // E2E key API

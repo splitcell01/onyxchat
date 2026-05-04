@@ -249,10 +249,24 @@ func (f *fakeMessageStore) GetUnreadForUser(userID, sinceID int64) ([]store.Mess
 	return out, nil
 }
 
+func (f *fakeMessageStore) DeleteMessage(id, senderID int64) error {
+	for i, m := range f.messages {
+		if m.ID == id && m.SenderID == senderID {
+			f.messages = append(f.messages[:i], f.messages[i+1:]...)
+			return nil
+		}
+	}
+	return sql.ErrNoRows
+}
+
 // fakePublisher satisfies EventPublisher without Redis.
 type fakePublisher struct{}
 
 func (p *fakePublisher) PublishMessageCreated(_ context.Context, _ MessageCreatedEvent) error {
+	return nil
+}
+
+func (p *fakePublisher) PublishMessageDeleted(_ context.Context, _ MessageDeletedEvent) error {
 	return nil
 }
 

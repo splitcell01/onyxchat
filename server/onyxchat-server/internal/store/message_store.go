@@ -171,6 +171,27 @@ func (s *MessageStore) CreateOrGetExisting(
 	return &m, false, nil
 }
 
+// DeleteMessage hard-deletes a message row. Only succeeds if senderID matches,
+// so callers cannot delete other users' messages. Returns sql.ErrNoRows if the
+// message doesn't exist or the caller is not the sender.
+func (s *MessageStore) DeleteMessage(id, senderID int64) error {
+	res, err := s.db.Exec(
+		`DELETE FROM messages WHERE id = $1 AND sender_id = $2`,
+		id, senderID,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 // GetUnreadForUser returns all messages sent to userID with id > sinceID.
 func (s *MessageStore) GetUnreadForUser(userID, sinceID int64) ([]Message, error) {
 	rows, err := s.db.Query(
